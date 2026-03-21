@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  /* REM-Leases Brand Kit — Enterprise Light Mode */
+  --color-brand-blue: #0891b2;       /* Teal — primary */
+  --color-brand-blue-dark: #0e7490;
+  --color-brand-blue-light: #22d3ee;
+  --color-brand-accent: #d97706;     /* Gold — CTAs */
+  --color-brand-accent-dark: #b45309;
+  --color-brand-accent-light: #fbbf24;
+  --color-brand-muted: #94a3b8;      /* Text Muted */
+  
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased overflow-x-hidden selection:bg-brand-blue/10 selection:text-brand-blue-dark;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white border border-slate-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)];
+  }
+  
+  .glass-card {
+    @apply bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-brand-blue/30 hover:shadow-md transition-all duration-300;
+  }
+  
+  .glass-input {
+    @apply bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue shadow-sm rounded-xl transition-all outline-none;
+  }
+
+  .glass-modal {
+    @apply bg-white border border-slate-200 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] rounded-3xl overflow-hidden;
+  }
+
+  .glass-button {
+    @apply relative overflow-hidden bg-brand-blue text-white border border-transparent shadow shadow-brand-blue/20 hover:shadow-md hover:shadow-brand-blue/30 hover:-translate-y-0.5 hover:bg-brand-blue-dark transition-all duration-300;
+  }
+  
+  .glass-gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 drop-shadow-sm;
+  }
+}

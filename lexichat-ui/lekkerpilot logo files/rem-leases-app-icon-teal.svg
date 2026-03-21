@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- REM-Leases — App Icon — 512x512 -->
+  <!-- Teal rounded square background -->
+  <rect width="512" height="512" rx="108" fill="#0891b2"/>
+  <!-- Document outline (white) -->
+  <g transform="translate(120, 130)">
+    <rect x="0" y="16" width="180" height="230" rx="20" fill="none" stroke="#ffffff" stroke-width="6" opacity="0.5"/>
+    <!-- Doc lines -->
+    <line x1="36" y1="76" x2="144" y2="76" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.35"/>
+    <line x1="36" y1="112" x2="124" y2="112" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.25"/>
+    <line x1="36" y1="148" x2="100" y2="148" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.18"/>
+    <!-- Gold wing -->
+    <path fill="#fbbf24" d="M146 28 Q200 8 272 0 L256 28 Q218 48 180 72 Z"/>
+    <path fill="#f59e0b" d="M166 52 Q212 28 272 0 L256 28 Q218 48 180 72 Z" opacity="0.45"/>
+    <!-- Speed line -->
+    <line x1="-30" y1="60" x2="36" y2="46" stroke="#fbbf24" stroke-width="7" stroke-linecap="round" opacity="0.4"/>
+  </g>
+</svg>

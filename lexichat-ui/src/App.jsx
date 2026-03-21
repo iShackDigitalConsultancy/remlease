@@ -1,0 +1,1575 @@
+import React, { useState, useCallback, useRef, useEffect, Component } from 'react';
+import { useDropzone } from 'react-dropzone';
+import axios from 'axios';
+import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+import { 
+  FileText, UploadCloud, MessageSquare, Send, CheckCircle2, 
+  Loader2, Scale, BookOpen, Clock, ChevronRight, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
+
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthScreen } from './pages/Auth';
+import { PrivacyPolicy, TermsConditions, HowToUse } from './pages/LegalPages';
+
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, errorInfo) { this.setState({ errorInfo }); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 font-mono text-red-500 bg-red-50 min-h-screen">
+          <h2 className="text-2xl font-bold mb-4">React Runtime Error</h2>
+          <p className="mb-4">{this.state.error?.toString()}</p>
+          <pre className="text-xs bg-white p-4 rounded shadow overflow-auto">{this.state.errorInfo?.componentStack}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+// Module-level variable to pass a file dropped on the landing page into the app
+let pendingDropFile = null;
+
+const ProtectedRoute = ({ children }) => {
+    // In Freemium mode, everyone can access the workspace.
+    return children;
+};
+
+function InnerApp() {
+  const { token, user, logout, sessionId } = useAuth();
+  const navigate = useNavigate();
+
+  const [isUploading, setIsUploading] = useState(false);
+  const [selectedDocId, setSelectedDocId] = useState(null);
+  const [selectedPage, setSelectedPage] = useState(1);
+  const [activeJurisdictions, setActiveJurisdictions] = useState([]);
+  const [isFirmSearchActive, setIsFirmSearchActive] = useState(false);
+  const [editingCaseId, setEditingCaseId] = useState(null);
+  const [editingCaseName, setEditingCaseName] = useState("");
+  
+  // Audit Feature State
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditDocId, setAuditDocId] = useState(null);
+  const [auditPolicy, setAuditPolicy] = useState("1. The lease must stipulate a clear expiration date.\n2. The security deposit amount must be clearly stated.\n3. Tenant maintenance obligations must be defined.");
+  const [auditResult, setAuditResult] = useState(null);
+  const [isAuditing, setIsAuditing] = useState(false);
+  
+  // Timeline Feature State
+  const [showTimelineModal, setShowTimelineModal] = useState(false);
+  const [timelineData, setTimelineData] = useState(null);
+  const [isGeneratingTimeline, setIsGeneratingTimeline] = useState(false);
+
+  // Compare Feature State
+  const [showCompareModal, setShowCompareModal] = useState(false);
+  const [compareResult, setCompareResult] = useState(null);
+  const [isComparing, setIsComparing] = useState(false);
+
+  const [cases, setCases] = useState([]);
+  const [activeCaseId, setActiveCaseId] = useState(localStorage.getItem('rem-leases_active_case') || null);
+  const activeCaseIdRef = useRef(activeCaseId);
+  const [chatMessages, setChatMessages] = useState({}); // mapped by activeCaseId
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [docBriefs, setDocBriefs] = useState({}); // doc_id → brief object
+
+  useEffect(() => { activeCaseIdRef.current = activeCaseId; }, [activeCaseId]);
+  useEffect(() => {
+    if (activeCaseId) localStorage.setItem('rem-leases_active_case', activeCaseId);
+    else localStorage.removeItem('rem-leases_active_case');
+  }, [activeCaseId]);
+
+  const fetchWorkspaces = async () => {
+      try {
+          const headers = token ? { Authorization: `Bearer ${token}` } : { 'X-Session-Id': sessionId };
+          const res = await axios.get(`${API_BASE}/workspaces`, {
+              headers
+          });
+          setCases(res.data);
+          
+          // Initialize chat messages for new cases if they don't exist
+          setChatMessages(prev => {
+              const newMsgs = { ...prev };
+              res.data.forEach(c => {
+                  if (!newMsgs[c.id]) {
+                      newMsgs[c.id] = [{
+                          role: 'assistant',
+                          content: "Hi. I'm REM Assistant, your AI assistant. I have loaded this Leasing Workspace for your portfolio. What would you like to know?"
+                      }];
+                  }
+              });
+              return newMsgs;
+          });
+
+          if (res.data.length > 0 && !res.data.find(c => c.id === activeCaseId)) {
+              setActiveCaseId(res.data[0].id);
+          }
+      } catch (e) {
+          console.error("Error fetching workspaces", e);
+          if (e.response?.status === 401) logout();
+      }
+  };
+
+  useEffect(() => {
+      fetchWorkspaces();
+  }, [token, sessionId]);
+
+  // Auto-upload a file dropped on the landing page
+  useEffect(() => {
+    if (!pendingDropFile || !sessionId) return;
+    const fileToUpload = pendingDropFile;
+    pendingDropFile = null; // clear immediately to avoid double-upload
+
+    const autoUpload = async () => {
+      try {
+        // First create a workspace for this file
+        const formData = new FormData();
+        formData.append('name', fileToUpload.name.replace(/\.pdf$/i, ''));
+        const headers = token ? { Authorization: `Bearer ${token}` } : { 'X-Session-Id': sessionId };
+        const wsRes = await axios.post(`${API_BASE}/workspaces`, formData, { headers });
+        const newWs = wsRes.data;
+
+        setCases(prev => [...prev, newWs]);
+        setActiveCaseId(newWs.id);
+        setChatMessages(prev => ({
+          ...prev,
+          [newWs.id]: [{ role: 'assistant', content: "Hi! I'm REM Assistant. I'm reading your document now — ask me anything once it's loaded." }]
+        }));
+
+        // Then upload the file into it
+        setIsUploading(true);
+        const uploadForm = new FormData();
+        uploadForm.append('file', fileToUpload);
+        const uploadHeaders = {};
+        if (token) uploadHeaders['Authorization'] = `Bearer ${token}`;
+        else uploadHeaders['X-Session-Id'] = sessionId;
+        await axios.post(`${API_BASE}/upload/${newWs.id}`, uploadForm, { headers: uploadHeaders });
+        await fetchWorkspaces();
+      } catch (e) {
+        console.error('Auto-upload from landing failed', e);
+      } finally {
+        setIsUploading(false);
+      }
+    };
+    autoUpload();
+  }, [sessionId]);
+
+  const activeCase = cases.find(c => c.id === activeCaseId) || null;
+  const messages = chatMessages[activeCaseId] || [];
+  const library = activeCase ? activeCase.documents : [];
+
+  const setMessagesForActive = (updater) => {
+      setChatMessages(prev => ({
+          ...prev,
+          [activeCaseIdRef.current]: typeof updater === 'function' ? updater(prev[activeCaseIdRef.current]) : updater
+      }));
+  };
+
+  const createNewCase = async () => {
+    try {
+        const formData = new FormData();
+        formData.append('name', `New Matter ${cases.length + 1}`);
+        const headers = token ? { Authorization: `Bearer ${token}` } : { 'X-Session-Id': sessionId };
+        const res = await axios.post(`${API_BASE}/workspaces`, formData, {
+            headers
+        });
+        setCases(prev => [...prev, res.data]);
+        setActiveCaseId(res.data.id);
+        setChatMessages(prev => ({
+            ...prev,
+            [res.data.id]: [{
+                role: 'assistant',
+                content: "Hi. Upload a lease agreement, tenant application, or property document into this new Portfolio workspace, and let's get started."
+            }]
+        }));
+    } catch (e) {
+        console.error("Failed to create workspace", e);
+        alert(`Could not create workspace: ${e.message || "Unknown error"}. Make sure API is online.`);
+    }
+  };
+
+  const deleteCase = async (id) => {
+    if (window.confirm("Are you sure you want to delete this case for everyone in the firm?")) {
+        try {
+            const headers = token ? { Authorization: `Bearer ${token}` } : { 'X-Session-Id': sessionId };
+            await axios.delete(`${API_BASE}/workspaces/${id}`, {
+                headers
+            });
+            setCases(prev => prev.filter(c => c.id !== id));
+            if (activeCaseId === id) setActiveCaseId(null);
+        } catch (e) {
+            console.error(e);
+            alert("Failed to delete workspace.");
+        }
+    }
+  };
+
+  const deleteDocument = async (docId) => {
+    if (!window.confirm("Remove this document from the workspace? This cannot be undone.")) return;
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : { 'X-Session-Id': sessionId };
+      await axios.delete(`${API_BASE}/documents/${docId}`, { headers });
+      if (selectedDocId === docId) setSelectedDocId(null);
+      setDocBriefs(prev => { const next = { ...prev }; delete next[docId]; return next; });
+      await fetchWorkspaces();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete document.");
+    }
+  };
+
+  const renameCase = async (id, newName) => {
+      if (!newName.trim()) {
+          setEditingCaseId(null);
+          return;
+      }
+      try {
+          const headers = token ? { Authorization: `Bearer ${token}` } : { 'X-Session-Id': sessionId };
+          await axios.put(`${API_BASE}/workspaces/${id}`, { name: newName }, { headers });
+          setCases(prev => prev.map(c => c.id === id ? { ...c, name: newName } : c));
+          setEditingCaseId(null);
+      } catch (e) {
+          console.error("Failed to rename workspace", e);
+          alert("Failed to rename workspace.");
+      }
+  };
+
+  const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [isReceiving, setIsReceiving] = useState(false);
+  const QUOTA_LIMIT = 500;
+  
+  const loadingMessages = [
+    "Reading case file...",
+    "Extracting critical clauses...",
+    "Vectorizing legal context...",
+    "Aligning precedents...",
+    "Generating embeddings...",
+    "Writing to high-speed memory...",
+    "Finalizing document parameters...",
+    "Optimizing search indexes...",
+    "Just a moment more..."
+  ];
+  const [loadingIndex, setLoadingIndex] = useState(0);
+
+  useEffect(() => {
+    let interval;
+    if (isUploading) {
+      setLoadingIndex(0);
+      interval = setInterval(() => {
+        setLoadingIndex(prev => (prev < loadingMessages.length - 1 ? prev + 1 : prev));
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [isUploading]);
+  
+  const chatEndRef = useRef(null);
+  
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleCitationClick = useCallback((filename, pageNum) => {
+    const doc = library.find(d => d.name.toLowerCase().includes(filename.toLowerCase()) || filename.toLowerCase().includes(d.name.toLowerCase()));
+    if (doc) {
+       setSelectedDocId(doc.id);
+       setSelectedPage(pageNum);
+    }
+  }, [library]);
+
+  const renderMessageContent = useCallback((content) => {
+    const regex = /\[([^\]]+?),\s*Page\s*(\d+)\]/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(content.substring(lastIndex, match.index));
+      }
+      const filename = match[1].trim();
+      const page = parseInt(match[2], 10);
+      const doc = library.find(d => d.name.toLowerCase().includes(filename.toLowerCase()) || filename.toLowerCase().includes(d.name.toLowerCase()));
+      const docId = doc ? doc.id : null;
+      
+      parts.push(
+        <button 
+          key={match.index}
+          onClick={() => docId && handleCitationClick(filename, page)}
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 mx-1 text-[11px] font-bold rounded transition-colors border ${docId ? 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border-blue-500/30 cursor-pointer shadow-sm translate-y-[-1px]' : 'bg-white/5 text-slate-400 border-white/10 cursor-not-allowed'}`}
+          title={docId ? 'View Source Document in Live Viewer' : 'Document not found in library'}
+        >
+          <BookOpen size={10} /> {filename}, p.{page}
+        </button>
+      );
+      lastIndex = match.index + match[0].length;
+    }
+    
+    if (lastIndex < content.length) {
+      parts.push(content.substring(lastIndex));
+    }
+    
+    return parts;
+  }, [library, handleCitationClick]);
+
+  const onDrop = useCallback(async (acceptedFiles) => {
+    const selected = acceptedFiles[0];
+    if (!selected) return;
+    
+    let targetId = activeCaseIdRef.current;
+    if (!targetId) {
+        alert("Please create or select a workspace first.");
+        return;
+    }
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', selected);
+    
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      else headers['X-Session-Id'] = sessionId;
+      
+      const res = await axios.post(`${API_BASE}/upload/${targetId}`, formData, {
+        headers
+      });
+      // Store the document brief returned by the API
+      if (res.data?.brief && res.data?.doc_id) {
+        setDocBriefs(prev => ({ ...prev, [res.data.doc_id]: res.data.brief }));
+      }
+      await fetchWorkspaces(); // Refresh the full list securely from db
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || "Error uploading document.");
+    } finally {
+      setIsUploading(false);
+    }
+  }, [token, sessionId]);
+  
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'application/pdf': ['.pdf'] },
+    maxFiles: 1
+  });
+
+  const handleDownloadDocx = async (content) => {
+    try {
+      const res = await fetch(`${API_BASE}/export_docx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: content })
+      });
+      if (!res.ok) throw new Error("Failed to generate document");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `REM-Leases_Draft_${new Date().getTime()}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to export Word Document.");
+    }
+  };
+
+  const executeAudit = async () => {
+    if (!auditPolicy.trim()) return alert("Please enter a policy to check against.");
+    setIsAuditing(true);
+    setAuditResult(null);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      else if (sessionId) headers['X-Session-Id'] = sessionId;
+      
+      const res = await axios.post(`${API_BASE}/audit`, {
+        doc_id: auditDocId,
+        policy: auditPolicy
+      }, { headers });
+      setAuditResult(res.data.audit);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to run document audit. The document might be too long or an error occurred.");
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
+  const executeTimelineGeneration = async () => {
+    const activeDocIds = library.map(d => d.id);
+    if (activeDocIds.length === 0) return alert("Please upload documents to generate a timeline.");
+    
+    setIsGeneratingTimeline(true);
+    setShowTimelineModal(true);
+    setTimelineData(null);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      else if (sessionId) headers['X-Session-Id'] = sessionId;
+      
+      const res = await axios.post(`${API_BASE}/extract-timeline`, {
+        doc_ids: activeDocIds
+      }, { headers });
+      setTimelineData(res.data.data);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to extract master timeline. The documents might be too complex or an exact chronological mapping could not be found.");
+      setShowTimelineModal(false);
+    } finally {
+      setIsGeneratingTimeline(false);
+    }
+  };
+
+  const executeComparison = async (targetDocId) => {
+    if (!selectedDocId) {
+      return alert("Please click on a 'Base / Original' document in your library to open it first, then click the compare icon on a second document.");
+    }
+    if (selectedDocId === targetDocId) {
+      return alert("Please select a different document to compare against.");
+    }
+    
+    setShowCompareModal(true);
+    setIsComparing(true);
+    setCompareResult(null);
+    
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      else if (sessionId) headers['X-Session-Id'] = sessionId;
+      
+      const res = await axios.post(`${API_BASE}/compare`, {
+        doc_id_a: selectedDocId,
+        doc_id_b: targetDocId
+      }, { headers });
+      setCompareResult(res.data.data);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to compare documents. The documents might exceed character limits or encounter parsing issues.");
+      setShowCompareModal(false);
+    } finally {
+      setIsComparing(false);
+    }
+  };
+
+  const handleSend = async (e, forceQuery = null, isTimeline = false) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const activeDocIds = library.map(d => d.id);
+    const queryToSend = forceQuery || input.trim();
+    
+    if (!queryToSend || (activeDocIds.length === 0 && activeJurisdictions.length === 0 && !isFirmSearchActive) || isTyping || isReceiving) return;
+    
+    if (!forceQuery) setInput('');
+    setMessagesForActive(prev => [...(prev||[]), { role: 'user', content: queryToSend }]);
+    setIsTyping(true);
+
+    
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      else headers['X-Session-Id'] = sessionId;
+
+      const res = await fetch(`${API_BASE}/chat`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          doc_ids: activeDocIds,
+          query: queryToSend,
+          is_timeline: isTimeline,
+          jurisdictions: activeJurisdictions,
+          is_firm_search: isFirmSearchActive
+        })
+      });
+      
+      if (!res.ok) {
+        if (res.status === 402) {
+          setShowLimitModal(true);
+          setMessagesForActive(prev => {
+              const cleaned = [...prev];
+              cleaned.pop(); // remove user message attempt
+              return cleaned;
+          });
+          setIsTyping(false);
+          return;
+        }
+        throw new Error(res.statusText);
+      }
+
+      setIsTyping(false);
+      setIsReceiving(true);
+      setMessagesForActive(prev => [...prev, { role: 'assistant', content: '' }]);
+      
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let assistantMessage = '';
+      
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.content) {
+                assistantMessage += data.content;
+                setMessagesForActive(prev => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = {
+                    ...newMessages[newMessages.length - 1],
+                    content: assistantMessage
+                  };
+                  return newMessages;
+                });
+              }
+            } catch (e) {
+              console.error("Error parsing SSE", e);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setMessagesForActive(prev => [...prev, {
+        role: 'assistant',
+        content: "Error: I could not contact the local execution engine."
+      }]);
+      setIsTyping(false);
+    } finally {
+      setIsReceiving(false);
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden relative">
+      
+      {/* Sidebar / File View */}
+      <div className="w-1/3 min-w-[320px] max-w-[400px] glass-panel border-r border-slate-200 flex flex-col z-10 relative">
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-white">
+          <div className="flex items-center gap-3">
+             <img src="/rem-logo.png" alt="REM-Leases" className="h-7 cursor-pointer" onClick={() => navigate('/')} />
+          </div>
+          <button onClick={logout} title="Sign Out" className="p-1.5 rounded bg-transparent hover:bg-slate-100 hover:text-red-500 text-slate-400 transition-colors">
+              <LogOut size={16} />
+          </button>
+        </div>
+        
+        <div className="p-4 flex-grow flex flex-col min-h-0 overflow-y-auto bg-slate-50">
+          <div className="mb-4 shrink-0">
+              <div className="flex items-center justify-between mb-3 px-2 text-xs font-bold text-brand-blue uppercase tracking-widest">
+                  <span>Property Portfolios</span>
+                  <button onClick={createNewCase} className="hover:text-brand-blue p-1 rounded-lg transition-colors text-slate-500 font-bold" title="New Property Portfolio">+</button>
+              </div>
+              <div className="space-y-1">
+                  {cases.length === 0 && <p className="text-xs text-slate-500 italic px-2">No firm workspaces yet.</p>}
+                  {cases.map(c => (
+                      <div 
+                          key={c.id} 
+                          onClick={() => {
+                              if (editingCaseId !== c.id) setActiveCaseId(c.id);
+                          }}
+                          className={`group flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${activeCaseId === c.id ? 'bg-white border border-slate-300 shadow-sm text-brand-blue' : 'hover:bg-slate-100 text-slate-600 border border-transparent'}`}
+                      >
+                          <div className="flex items-center gap-2 truncate w-full">
+                              <FolderOpen size={14} className={activeCaseId === c.id ? 'text-brand-blue shrink-0' : 'text-slate-400 shrink-0'} />
+                              {editingCaseId === c.id ? (
+                                  <input 
+                                      type="text" 
+                                      autoFocus
+                                      value={editingCaseName}
+                                      onChange={e => setEditingCaseName(e.target.value)}
+                                      onBlur={() => renameCase(c.id, editingCaseName)}
+                                      onKeyDown={e => {
+                                          if (e.key === 'Enter') renameCase(c.id, editingCaseName);
+                                          if (e.key === 'Escape') setEditingCaseId(null);
+                                      }}
+                                      className="text-sm font-semibold w-full bg-white border border-brand-blue rounded px-2 py-0.5 outline-none text-slate-900 shadow-sm"
+                                      onClick={e => e.stopPropagation()}
+                                  />
+                              ) : (
+                                  <span className="text-sm font-semibold truncate">{c.name}</span>
+                              )}
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0 ml-2">
+                              {editingCaseId !== c.id && (
+                                  <button onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      setEditingCaseId(c.id); 
+                                      setEditingCaseName(c.name); 
+                                  }} className="text-slate-400 hover:text-brand-blue rounded p-1 transition-colors">
+                                      <Edit2 size={12} />
+                                  </button>
+                              )}
+                              <button onClick={(e) => { e.stopPropagation(); deleteCase(c.id); }} className="text-slate-400 hover:text-red-500 rounded p-1 transition-colors">
+                                  <Trash2 size={12} />
+                              </button>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          </div>
+
+          {activeCase && (
+            <div className="pt-4 border-t border-slate-200 flex flex-col">
+              <h3 className="text-[10px] font-bold text-brand-blue uppercase tracking-widest mb-3 px-2 truncate" title={activeCase.name}>Lease Files in: {activeCase.name}</h3>
+              
+              <div className="flex flex-col space-y-3 mb-6">
+                {library.map(doc => (
+                  <div key={doc.id} className="glass-card p-3.5 flex items-center justify-between group">
+                    <div className="flex items-center gap-3 overflow-hidden cursor-pointer flex-1" onClick={() => { setSelectedDocId(doc.id); setSelectedPage(1); }}>
+                      <FileText size={16} className={`flex-shrink-0 transition-transform duration-300 ${selectedDocId === doc.id ? 'text-brand-accent scale-110' : 'text-slate-400 group-hover:text-brand-blue'}`} />
+                      <span className={`text-[13px] font-semibold truncate transition-colors ${selectedDocId === doc.id ? 'text-slate-900' : 'text-slate-600 group-hover:text-slate-900'}`} title={doc.name}>{doc.name}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); executeComparison(doc.id); }}
+                        className="ml-0.5 shrink-0 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-blue transition-all rounded p-0.5"
+                        title="Compare against currently active document"
+                      >
+                        <GitCompare size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setAuditDocId(doc.id); setShowAuditModal(true); setAuditResult(null); }}
+                        className="ml-0.5 shrink-0 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-accent transition-all rounded p-0.5"
+                        title="Audit Document"
+                      >
+                        <ShieldCheck size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteDocument(doc.id); }}
+                        className="ml-0.5 shrink-0 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-all rounded p-0.5"
+                        title="Remove document"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div {...getRootProps()} className={`shrink-0 border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${isDragActive ? 'border-brand-accent bg-brand-accent/5' : 'border-slate-300 hover:border-brand-blue hover:bg-slate-100'}`}>
+                <input {...getInputProps()} />
+                {isUploading ? (
+                  <div className="flex flex-col items-center justify-center text-brand-accent">
+                    <Loader2 size={16} className="animate-spin mb-1" />
+                    <p className="font-semibold text-[10px] text-center transition-all duration-300">{loadingMessages[loadingIndex]}</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center text-slate-500">
+                    <UploadCloud size={18} className="text-brand-blue mb-1" />
+                    <p className="font-bold text-[11px]">+ Add Document</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!token && (
+            <div className="mt-4 shrink-0 bg-brand-accent/20 border border-brand-accent/50 rounded-xl p-4 text-center shadow-[0_0_15px_rgba(217,119,6,0.2)]">
+                <p className="text-xs text-brand-accent-light font-bold mb-2">⚠️ Temporary Session</p>
+                <p className="text-[10px] text-slate-300 mb-3">Your workspace will be lost if you clear your browser cache.</p>
+                <button onClick={() => window.location.href = '/signup'} className="bg-brand-accent text-white text-[11px] font-bold px-4 py-2 rounded-lg shadow-md hover:bg-brand-accent-dark w-full transition-colors">
+                    Save My Documents (Free)
+                </button>
+            </div>
+          )}
+
+          <div className="mt-4 mb-2 shrink-0 border-t border-slate-200 pt-4">
+             <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2">
+                 <BookOpen size={12} /> Property Law & Leasing Regulations
+             </h3>
+             <div className="space-y-2 px-2">
+                 <label className="flex items-start gap-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-colors border border-transparent">
+                     <input 
+                         type="checkbox" 
+                         checked={activeJurisdictions.includes('za')}
+                         onChange={(e) => {
+                             if (e.target.checked) setActiveJurisdictions(prev => [...prev, 'za']);
+                             else setActiveJurisdictions(prev => prev.filter(j => j !== 'za'));
+                         }}
+                         className="mt-1 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
+                     />
+                     <div className="flex flex-col">
+                         <div className="flex items-center gap-2">
+                             <span className="font-semibold text-xs text-slate-900">South Africa</span>
+                             <span className="text-[9px] bg-brand-accent/10 px-1.5 py-0.5 rounded text-brand-accent uppercase tracking-wider font-bold">Premium</span>
+                         </div>
+                         <div className="text-[10px] text-slate-500 leading-tight mt-1 space-y-0.5">
+                             <p>✓ Rental Housing Act (50 of 1999)</p>
+                             <p>✓ Consumer Protection Act (CPA)</p>
+                             <p>✓ Prevention of Illegal Eviction Act (PIE)</p>
+                             <p>✓ National Credit Act (34 of 2005)</p>
+                             <p>✓ Property Practitioners Act</p>
+                         </div>
+                     </div>
+                 </label>
+             </div>
+          </div>
+
+          <div className="mt-2 mb-2 shrink-0 border-t border-slate-200 pt-4">
+             <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2">
+                 <Building2 size={12} /> Agency & Portfolio History
+             </h3>
+             <div className="space-y-2 px-2">
+                 <label className="flex items-start gap-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-colors border border-transparent">
+                     <input 
+                         type="checkbox" 
+                         checked={isFirmSearchActive}
+                         onChange={(e) => setIsFirmSearchActive(e.target.checked)}
+                         className="mt-1 rounded border-slate-300 text-brand-accent focus:ring-brand-accent"
+                         disabled={!user?.firm_id}
+                     />
+                     <div className="flex flex-col">
+                         <div className="flex items-center gap-2">
+                             <span className="font-semibold text-xs text-slate-900">Search Portfolio History</span>
+                             <span className="text-[9px] bg-brand-accent/10 px-1.5 py-0.5 rounded text-brand-accent uppercase tracking-wider font-bold">Enterprise</span>
+                         </div>
+                         <div className="text-[10px] text-slate-500 leading-tight mt-1">
+                             <p>Search across all lease agreements and documents uploaded by your agency. Bypasses current workspace limit.</p>
+                         </div>
+                     </div>
+                 </label>
+             </div>
+          </div>
+          
+          <div className="mt-8 shrink-0 pb-4">
+             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Support & Legal</h3>
+             <div className="flex flex-col gap-2 mt-4 px-1">
+                 <Link to="/how-to" className="text-[11px] text-left text-slate-500 hover:text-brand-blue font-bold transition-colors flex items-center gap-2"><BookOpen size={12}/> How to Use REM-Leases</Link>
+                 <Link to="/terms" className="text-[11px] text-left text-slate-500 hover:text-brand-blue font-bold transition-colors flex items-center gap-2 ">⚖️ Terms of Service</Link>
+                 <Link to="/privacy" className="text-[11px] text-left text-slate-500 hover:text-brand-blue font-bold transition-colors flex items-center gap-2 ">🛡️ Privacy Policy</Link>
+             </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Chat Interface */}
+      <div className="flex-1 flex flex-col relative h-full bg-white z-10">
+        <div className="absolute top-0 left-0 w-full h-8 flex z-10 pointer-events-none shrink-0 bg-gradient-to-b from-white to-transparent"></div>
+        
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scroll-smooth">
+          {!activeCase ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 mt-20">
+              <FolderOpen size={48} className="mb-4 text-slate-300" />
+              <p className="text-xl font-bold text-slate-900">Select a Property Portfolio</p>
+              <p className="text-sm mt-2 text-center max-w-sm text-slate-500">Choose an existing portfolio from the sidebar or click <span className="font-bold text-brand-blue">+</span> to start a new workspace securely for your team.</p>
+            </div>
+          ) : (
+            <>
+              {messages.map((m, idx) => (
+                <motion.div 
+                  key={idx}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start max-w-3xl'}`}
+                >
+                  {m.role === 'assistant' && (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-blue to-brand-blue-dark flex items-center justify-center text-white flex-shrink-0 mt-1 shadow-[0_0_15px_rgba(8,145,178,0.5)] border border-brand-blue-light/50">
+                      <Scale size={14} />
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1 max-w-2xl">
+                    <div className={`p-4 rounded-2xl leading-relaxed text-[15px] whitespace-pre-wrap ${
+                      m.role === 'user' 
+                        ? 'bg-brand-blue text-white rounded-br-none shadow-md border border-brand-blue-light/30' 
+                        : 'bg-white border text-slate-800 border-slate-200 shadow-sm rounded-bl-none'
+                    }`}>
+                      {m.role === 'assistant' ? renderMessageContent(m.content) : m.content}
+                    </div>
+                    
+                    {m.role === 'assistant' && !isReceiving && m.content.length > 50 && (
+                      <button 
+                         onClick={() => handleDownloadDocx(m.content)}
+                         className="self-start mt-1 flex items-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-brand-blue py-1 px-2 rounded hover:bg-slate-100 transition-colors"
+                         title="Export to Microsoft Word"
+                      >
+                        <Download size={12} /> Export to Word
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </>
+          )}
+          
+          {isTyping && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4 max-w-3xl">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-blue to-brand-blue-dark flex items-center justify-center text-white flex-shrink-0 mt-1 shadow-md border border-brand-blue/20">
+                <Scale size={14} />
+              </div>
+              <div className="p-4 bg-white border border-slate-200 shadow-sm rounded-bl-none rounded-2xl flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-brand-blue animate-bounce"></span>
+                <span className="w-2 h-2 rounded-full bg-brand-blue animate-bounce delay-75"></span>
+                <span className="w-2 h-2 rounded-full bg-brand-blue animate-bounce delay-150"></span>
+              </div>
+            </motion.div>
+          )}
+          
+          {/* Quick Prompts */}
+          {messages.length === 1 && !isTyping && !isReceiving && library.length > 0 && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="flex gap-2 flex-wrap mt-2 max-w-3xl ml-12">
+              {["Summarize the main argument", "List all dates and deadlines mentioned", "Find any contradictions"].map((prompt, i) => (
+                <button 
+                  key={i} 
+                  onClick={(e) => { setInput(prompt); setTimeout(() => handleSend(e), 50); }} 
+                  className="text-xs font-semibold bg-white text-brand-blue px-4 py-2 rounded-full border border-slate-200 shadow-sm hover:border-brand-blue hover:shadow-md transition-all"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </motion.div>
+          )}
+          
+          <div ref={chatEndRef} className="h-4 shrink-0" />
+        </div>
+        
+        {/* Input Form */}
+        <div className="shrink-0 bg-slate-50 p-4 md:p-6 border-t border-slate-200/60 z-20 relative">
+
+          <div className="max-w-3xl mx-auto relative group">
+            <div className="flex justify-between items-center mb-2 px-1">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+                Enterprise Active
+              </span>
+            </div>
+
+            <form onSubmit={handleSend} className="relative flex items-center transition-shadow bg-white rounded-2xl shadow-sm border border-slate-300 focus-within:border-brand-blue focus-within:ring-4 focus-within:ring-brand-blue/20">
+              <input 
+                type="text" 
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                placeholder={isFirmSearchActive ? "Search firm precedents globally..." : !activeCase ? "Select a Workspace first..." : library.length > 0 ? "Ask a question about the firm documents..." : activeJurisdictions.length > 0 ? "Ask a question about the SA Knowledge Base..." : "Awaiting document upload..."}
+                disabled={!activeCase || (library.length === 0 && activeJurisdictions.length === 0 && !isFirmSearchActive) || isTyping || isReceiving}
+                className="w-full py-4 pl-6 pr-16 bg-transparent outline-none disabled:opacity-50 text-slate-900 placeholder-slate-400 font-medium disabled:bg-slate-50 disabled:cursor-not-allowed rounded-2xl"
+              />
+              <button 
+                type="submit"
+                disabled={!activeCase || (library.length === 0 && activeJurisdictions.length === 0 && !isFirmSearchActive) || isTyping || isReceiving || !input.trim()}
+                className="absolute right-2 p-2.5 bg-brand-blue text-white rounded-xl disabled:bg-slate-100 disabled:text-slate-400 transition-colors shadow-sm disabled:shadow-none border border-transparent disabled:border-slate-200"
+              >
+                <Send size={20} className={!activeCase || (library.length === 0 && activeJurisdictions.length === 0 && !isFirmSearchActive) || isTyping || isReceiving || !input.trim() ? "" : "translate-x-[1px] -translate-y-[1px]"} />
+              </button>
+            </form>
+            
+            <div className="flex justify-between items-center mt-3 px-1">
+              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">REM-Leases AI can hallucinate. Verify claims against primary sources.</p>
+              
+              <button 
+                type="button"
+                onClick={executeTimelineGeneration}
+                disabled={!activeCase || library.length === 0 || isGeneratingTimeline}
+                className="flex items-center gap-1.5 text-xs font-bold text-white bg-brand-accent hover:bg-brand-accent-dark px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed"
+              >
+                {isGeneratingTimeline ? <><Loader2 size={12} className="animate-spin" /> Extracting...</> : <><Clock size={12} /> Generate Master Timeline</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showLimitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-md w-full shadow-2xl transition-all transform scale-100">
+            <div className="flex justify-center mb-6">
+              <Lock size={48} className="text-brand-blue" />
+            </div>
+            <h2 className="text-2xl font-bold text-center text-slate-900 mb-4">Registration Required</h2>
+            <p className="text-slate-600 text-center mb-8 leading-relaxed">
+              Create an account or sign in to save your workspaces, track history, and securely upload unlimited documents.
+            </p>
+            <div className="space-y-4">
+              <button 
+                onClick={() => navigate('/auth')} 
+                className="w-full bg-brand-blue text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:bg-brand-blue-dark transition-all"
+              >
+                Sign Up / Login
+              </button>
+              <button 
+                onClick={() => setShowLimitModal(false)}
+                className="w-full bg-slate-100 text-slate-600 font-bold py-3 px-4 rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compare Modal */}
+      {showCompareModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <GitCompare className="text-brand-accent" size={18} /> Document Redline Comparison
+              </h2>
+              <button 
+                onClick={() => {
+                   if(isComparing && !window.confirm("Comparison is still running. Are you sure you want to close?")) return;
+                   setShowCompareModal(false);
+                }} 
+                className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto flex flex-col bg-white p-6 md:p-8">
+              {isComparing ? (
+                 <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
+                    <Loader2 size={40} className="animate-spin text-brand-accent" />
+                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">Forensically comparing documents line-by-line...</p>
+                 </div>
+              ) : compareResult ? (
+                <div className="max-w-4xl mx-auto w-full space-y-8">
+                  {/* Executive Risk Summary */}
+                  <div className="bg-slate-50 border border-brand-blue/30 rounded-xl p-6 relative overflow-hidden shadow-sm">
+                     <div className="absolute top-0 left-0 w-1 h-full bg-brand-blue"></div>
+                     <h3 className="text-xs font-black text-brand-blue uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <Zap size={14} className="text-brand-accent" /> Executive Risk Summary
+                     </h3>
+                     <p className="text-sm text-slate-700 font-medium leading-relaxed">
+                        {compareResult.risk_summary}
+                     </p>
+                  </div>
+                  
+                  {/* Changes List */}
+                  <div className="space-y-6">
+                     <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200 pb-2">
+                        Identified Clause Modifications
+                     </h3>
+                     
+                     {compareResult.changes?.length === 0 ? (
+                        <div className="text-center p-12 text-slate-500 text-sm border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50">No substantive legal changes found between these documents.</div>
+                     ) : (
+                        compareResult.changes?.map((change, idx) => (
+                           <div key={idx} className="bg-white border border-slate-200 shadow-sm rounded-xl text-sm overflow-hidden">
+                              <div className={`px-4 py-2 flex justify-between items-center border-b border-slate-200 ${change.type === 'ADDED' ? 'bg-green-50 text-green-700' : change.type === 'DELETED' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+                                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md ${change.type === 'ADDED' ? 'bg-green-100' : change.type === 'DELETED' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                                    {change.type}
+                                 </span>
+                              </div>
+                              
+                              <div className="p-0 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-slate-200">
+                                 {change.type !== 'ADDED' && (
+                                    <div className="p-5 flex-1 bg-red-50/30">
+                                       <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Original Document</span>
+                                       <p className={`text-slate-600 leading-relaxed ${change.type === 'DELETED' ? 'line-through text-red-500/80' : ''}`}>
+                                          {change.original_text || "N/A"}
+                                       </p>
+                                    </div>
+                                 )}
+                                 {change.type !== 'DELETED' && (
+                                    <div className="p-5 flex-1 bg-green-50/30">
+                                       <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Modified Draft</span>
+                                       <p className={`text-slate-800 leading-relaxed ${change.type === 'ADDED' ? 'text-green-700 bg-green-100/50 p-1 -m-1 rounded' : ''}`}>
+                                          {change.new_text || "N/A"}
+                                       </p>
+                                    </div>
+                                 )}
+                              </div>
+                              
+                              <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 text-xs flex items-start gap-2">
+                                 <ShieldAlert size={14} className="text-brand-blue mt-0.5 shrink-0" />
+                                 <span className="text-slate-600 font-medium leading-relaxed"><strong className="text-slate-900">Risk Impact:</strong> {change.impact}</span>
+                              </div>
+                           </div>
+                        ))
+                     )}
+                  </div>
+                </div>
+              ) : (
+                 <div className="flex-1 flex flex-col items-center justify-center text-red-500 gap-4">
+                    <XCircle size={40} />
+                    <p className="font-bold text-sm">Failed to extract comparison data.</p>
+                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit Modal */}
+      {showAuditModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl flex flex-col max-h-[85vh]">
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="text-brand-accent" size={18} /> Document Compliance Audit
+              </h2>
+              <button onClick={() => setShowAuditModal(false)} className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-4">
+               <div>
+                   <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Audit Policy Checklist</label>
+                   <textarea
+                     value={auditPolicy}
+                     onChange={e => setAuditPolicy(e.target.value)}
+                     disabled={isAuditing}
+                     placeholder="- Term must be less than 5 years&#10;- Governing law is South Africa"
+                     className="w-full h-32 p-3 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-accent/40 focus:border-brand-accent outline-none shadow-sm transition-all resize-none text-slate-900 placeholder-slate-400"
+                   />
+               </div>
+               
+               <div className="flex justify-end relative">
+                  <button 
+                    onClick={executeAudit}
+                    disabled={isAuditing || !auditPolicy.trim()}
+                    className="bg-brand-accent text-white hover:bg-brand-accent-dark px-5 py-2.5 rounded-xl font-bold text-sm shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 flex items-center gap-2"
+                  >
+                    {isAuditing ? <><Loader2 size={16} className="animate-spin" /> Running Audit...</> : "Run Policy Audit"}
+                  </button>
+               </div>
+
+               {auditResult && (
+                 <div className="mt-4 border-t border-slate-200 pt-6">
+                    <h3 className="text-xs font-bold text-slate-500 mb-4 uppercase tracking-wide flex justify-between items-center">
+                        Audit Report Card
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 border border-green-200 text-green-700 rounded-full">{Array.isArray(auditResult) ? auditResult.filter(r => r.status === 'PASS').length : 0} Passed</span>
+                    </h3>
+                    <div className="space-y-3">
+                       {Array.isArray(auditResult) ? auditResult.map((item, idx) => (
+                          <div key={idx} className={`p-4 rounded-xl shadow-sm border flex flex-col gap-2 bg-white text-slate-800 ${item.status === 'PASS' ? 'border-l-4 border-l-green-500 border-slate-200' : item.status === 'FAIL' ? 'border-l-4 border-l-red-500 border-slate-200 bg-red-50/30' : 'border-l-4 border-l-amber-500 border-slate-200 bg-amber-50/30'}`}>
+                             <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
+                                {item.status === 'PASS' ? <CheckCircle2 size={16} className="text-green-500 shrink-0" /> : item.status === 'FAIL' ? <XCircle size={16} className="text-red-500 shrink-0" /> : <ShieldAlert size={16} className="text-amber-500 shrink-0" />}
+                                {item.check}
+                             </div>
+                             <div className="text-xs text-slate-600 leading-relaxed ml-6 rounded bg-slate-50 p-2 border border-slate-100">
+                                {item.explanation}
+                             </div>
+                          </div>
+                       )) : (
+                         <div className="p-4 bg-red-50 text-red-600 border border-red-200 text-sm rounded-xl">Invalid audit response structure from AI. Please try again.</div>
+                       )}
+                    </div>
+                 </div>
+               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Timeline Modal */}
+      {showTimelineModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Clock className="text-brand-accent" size={18} /> Master Timeline & Cast of Characters
+              </h2>
+              <button 
+                onClick={() => {
+                   if(isGeneratingTimeline) {
+                      if(!window.confirm("Timeline generation is still running explicitly in the background. Are you sure you want to close?")) return;
+                   }
+                   setShowTimelineModal(false);
+                }} 
+                className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-white">
+              {isGeneratingTimeline ? (
+                 <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
+                    <Loader2 size={40} className="animate-spin text-brand-accent" />
+                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">Synthesizing multiple documents into a chronological history...</p>
+                 </div>
+              ) : timelineData ? (
+                <>
+                  {/* Cast of Characters (Left Pane) */}
+                  <div className="w-full md:w-1/3 border-r border-slate-200 bg-slate-50 p-6 overflow-y-auto">
+                     <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                        <Users size={14} className="text-brand-blue" /> Cast of Characters
+                     </h3>
+                     <div className="flex flex-col gap-4">
+                        {timelineData.characters?.map((char, idx) => (
+                          <div key={idx} className="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
+                             <span className="inline-block px-2 py-0.5 bg-brand-accent/10 border border-brand-accent/20 text-brand-accent text-[10px] font-bold uppercase tracking-wider rounded-md mb-2">{char.role}</span>
+                             <h4 className="text-sm font-bold text-slate-900 mb-1">{char.name}</h4>
+                             <p className="text-xs text-slate-600 leading-relaxed">{char.description}</p>
+                          </div>
+                        ))}
+                        {(!timelineData.characters || timelineData.characters.length === 0) && (
+                          <div className="text-center p-6 text-slate-500 text-sm">No specific named entities identified.</div>
+                        )}
+                     </div>
+                  </div>
+                  
+                  {/* Master Timeline (Right Pane) */}
+                  <div className="w-full md:w-2/3 p-8 overflow-y-auto bg-white relative">
+                     <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-8 flex items-center gap-2">
+                        <Clock size={14} className="text-brand-accent" /> Chronological Event Trace
+                     </h3>
+                     
+                     <div className="relative pl-6 border-l-2 border-brand-accent/30 space-y-8 pb-10">
+                       {timelineData.timeline?.map((event, idx) => (
+                          <div key={idx} className="relative group">
+                             <div className="absolute w-3.5 h-3.5 rounded-full bg-brand-accent border-4 border-white -left-[31px] top-1 group-hover:scale-125 transition-transform shadow-sm" />
+                             <div className="flex items-start gap-3 flex-col">
+                                <div className="flex items-center gap-3">
+                                   <span className="text-xs font-black text-white bg-brand-accent px-2.5 py-1 rounded-md shadow-sm">{event.date}</span>
+                                   <span className="flex items-center gap-1 text-[10px] font-medium text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full"><FileText size={10}/> {event.source}</span>
+                                </div>
+                                <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 w-full break-words hover:border-brand-blue/30 transition-colors">
+                                   <p className="text-sm text-slate-800 leading-relaxed font-medium">{event.event}</p>
+                                </div>
+                             </div>
+                          </div>
+                       ))}
+                       {(!timelineData.timeline || timelineData.timeline.length === 0) && (
+                          <div className="text-center p-12 text-slate-500 text-sm border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50">No chronological events extracted from these documents.</div>
+                       )}
+                     </div>
+                  </div>
+                </>
+              ) : (
+                 <div className="flex-1 flex flex-col items-center justify-center text-red-500 gap-4">
+                    <ShieldAlert size={40} />
+                    <p className="font-bold text-sm">Failed to extract timeline data.</p>
+                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Viewer Pane */}
+      {selectedDocId && (
+        <div className="w-1/3 min-w-[320px] max-w-[450px] glass-panel border-l border-white/10 flex flex-col z-20">
+          <div className="p-4 border-b border-white/5 flex items-center justify-between bg-transparent shrink-0">
+             <div className="flex items-center gap-2 text-slate-200 font-semibold text-sm truncate pr-4">
+                <FileText size={16} className="text-brand-blue shrink-0" />
+                <span className="truncate">{library.find(d => d.id === selectedDocId)?.name}</span>
+             </div>
+             <button onClick={() => setSelectedDocId(null)} className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-slate-100 shrink-0">
+                <X size={18} />
+             </button>
+          </div>
+
+           {/* ── Document Brief ── */}
+           {docBriefs[selectedDocId] && (() => {
+             const brief = docBriefs[selectedDocId];
+             return (
+               <details className="shrink-0 border-b border-slate-200 bg-amber-50/40 group">
+                 <summary className="flex items-center justify-between px-4 py-2.5 cursor-pointer list-none select-none hover:bg-amber-50 transition-colors">
+                   <span className="flex items-center gap-2 text-xs font-bold text-amber-700 uppercase tracking-widest">
+                     <Zap size={12} className="text-amber-500" />
+                     Document Brief
+                     {brief.doc_type && <span className="font-normal text-amber-600 normal-case tracking-normal ml-1">— {brief.doc_type}</span>}
+                   </span>
+                   <ChevronRight size={14} className="text-amber-500 group-open:rotate-90 transition-transform" />
+                 </summary>
+                 <div className="px-4 pb-4 pt-1 space-y-3 text-xs">
+                   {/* Summary */}
+                   {brief.summary && (
+                     <p className="text-slate-300 leading-relaxed">{brief.summary}</p>
+                   )}
+                   {/* Parties */}
+                   {brief.parties?.length > 0 && (
+                     <div>
+                       <p className="font-bold text-slate-500 uppercase tracking-widest text-[10px] mb-1">Parties</p>
+                       <div className="flex flex-wrap gap-1.5">
+                         {brief.parties.map((p, i) => (
+                           <span key={i} className="bg-white/5 border border-white/10 text-slate-300 px-2 py-0.5 rounded-full font-medium">{p}</span>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+                   {/* Key Dates */}
+                   {brief.key_dates?.length > 0 && (
+                     <div>
+                       <p className="font-bold text-slate-500 uppercase tracking-widest text-[10px] mb-1">Key Dates</p>
+                       <div className="space-y-1">
+                         {brief.key_dates.map((d, i) => (
+                           <div key={i} className="flex justify-between text-slate-400">
+                             <span className="text-slate-400">{d.label}</span>
+                             <span className="font-semibold">{d.value}</span>
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+                   {/* Risks */}
+                   {brief.risks?.filter(r => r).length > 0 && (
+                     <div>
+                       <p className="font-bold text-slate-500 uppercase tracking-widest text-[10px] mb-1">Risk Flags</p>
+                       <ul className="space-y-1">
+                         {brief.risks.filter(r => r).map((r, i) => (
+                           <li key={i} className="flex items-start gap-1.5 text-amber-700">
+                             <span className="mt-0.5 shrink-0">⚠</span>
+                             <span>{r}</span>
+                           </li>
+                         ))}
+                       </ul>
+                     </div>
+                   )}
+                 </div>
+               </details>
+             );
+           })()}
+
+          <div className="flex-1 bg-slate-900/50 overflow-y-auto flex justify-center py-6">
+             <Document
+                file={`${API_BASE}/document/${selectedDocId}`}
+                loading={
+                   <div className="flex flex-col items-center justify-center text-slate-400 h-full mt-32">
+                      <Loader2 size={32} className="animate-spin mb-4 text-brand-blue" />
+                      <span className="text-xs font-semibold">Loading PDF visuals...</span>
+                   </div>
+                }
+                error={
+                   <div className="text-sm text-red-500 text-center mt-32 px-4 font-semibold">Cannot render document visual. Verify the local server is serving the file bytes.</div>
+                }
+             >
+                <Page 
+                  pageNumber={selectedPage} 
+                  renderTextLayer={true} 
+                  renderAnnotationLayer={false} 
+                  className="shadow-2xl border border-white/10"
+                  width={400} 
+                />
+             </Document>
+          </div>
+          
+          <div className="p-4 border-t border-white/10 glass-panel flex justify-between items-center shrink-0 rounded-b-2xl">
+             <button disabled={selectedPage <= 1} onClick={() => setSelectedPage(p => Math.max(1, p - 1))} className="px-4 py-2 rounded-lg bg-white/5 text-slate-300 text-xs font-bold hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors uppercase tracking-widest shadow-sm">Prev</button>
+             <span className="text-xs font-bold text-slate-300 uppercase tracking-widest bg-white/5 px-3 py-1.5 rounded border border-white/10">Page {selectedPage}</span>
+             <button onClick={() => setSelectedPage(p => p + 1)} className="px-4 py-2 rounded-lg bg-white/5 text-slate-300 text-xs font-bold hover:bg-white/10 transition-colors uppercase tracking-widest shadow-sm">Next</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Dropzone for unauthenticated users on the landing page.
+// Stores the dropped file in the module-level pendingDropFile, then navigates to /app
+// where InnerApp's useEffect picks it up and auto-uploads.
+function LandingDropzone({ navigate }) {
+  const onDrop = useCallback((acceptedFiles) => {
+    const file = acceptedFiles[0];
+    if (!file) return;
+    pendingDropFile = file;
+    navigate('/app');
+  }, [navigate]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'application/pdf': ['.pdf'] },
+    maxFiles: 1,
+  });
+
+  return (
+    <div
+      {...getRootProps()}
+      className={`bg-white border-2 border-dashed rounded-3xl p-12 text-center cursor-pointer transition-all shadow-md ${
+        isDragActive
+          ? 'border-brand-accent bg-brand-blue/5 shadow-lg scale-[1.02]'
+          : 'border-slate-300 hover:border-brand-accent hover:shadow-lg hover:scale-[1.01]'
+      }`}
+    >
+      <input {...getInputProps()} />
+      <div className="w-20 h-20 bg-slate-50 rounded-full mx-auto flex items-center justify-center mb-6 text-brand-blue shadow-sm border border-slate-200">
+        <UploadCloud size={36} />
+      </div>
+      {isDragActive ? (
+        <>
+          <h3 className="text-2xl font-bold text-brand-accent mb-2">Drop it — we've got it.</h3>
+          <p className="text-slate-500 font-medium">Release to analyse your document instantly</p>
+        </>
+      ) : (
+        <>
+          <h3 className="text-2xl font-bold text-slate-900 mb-2">Drop a PDF to try for free</h3>
+          <p className="text-slate-600 mb-6 font-medium">
+            No sign-up needed. Upload any residential or commercial lease and start asking questions immediately.
+          </p>
+          <div className="inline-flex items-center gap-2 bg-brand-blue hover:bg-brand-blue-dark text-white font-bold px-8 py-3 rounded-full shadow-md hover:shadow-lg transition-all text-sm border border-transparent">
+            <UploadCloud size={16} /> Select a PDF
+          </div>
+          <p className="text-xs text-slate-500 mt-4">PDF files only · Analysed securely in your session</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Separate Landing Page Component
+function LandingPage() {
+  const { token } = useAuth();
+  const navigate = useNavigate();
+  const [openFaq, setOpenFaq] = useState(null);
+
+  const features = [
+    {
+      number: "01",
+      title: "Instant Lease Analysis",
+      hook: "Drop a 200-page lease. Get answers in 30 seconds.",
+      body: "Upload any residential lease, commercial lease, or addendum. RealEstateMeta extracts every clause, obligation, escalation formula, critical date and red flag — then lets you interrogate the document like you wrote it yourself.",
+      details: ["Clause extraction and categorisation","Escalation and renewal date mapping","Obligation and liability flagging","Natural language Q&A across the full document"],
+    },
+    {
+      number: "02",
+      title: "Portfolio Intelligence",
+      hook: "See your entire lease book at a glance. Not one lease at a time.",
+      body: "Surface patterns, risks and opportunities across your entire portfolio. Which tenants have below-market escalations? Which leases expire in Q1? Where are your maintenance obligations heaviest? What used to take a week of spreadsheet work now takes three clicks.",
+      details: ["Cross-reference clauses across your full portfolio","Surface expiring leases and upcoming renewal windows","Compare escalation terms across tenants","Flag inconsistencies and non-standard clauses"],
+    },
+    {
+      number: "03",
+      title: "Enterprise Security",
+      hook: "Your tenant data stays yours. Full stop.",
+      body: "POPIA-compliant architecture, end-to-end encryption, and zero data retention on third-party models. Your lease documents contain sensitive commercial and personal information — we treat them accordingly.",
+      details: ["End-to-end encryption at rest and in transit","Zero data retention on external AI models","POPIA-compliant data handling","Full audit trail for every query"],
+    },
+  ];
+
+  const steps = [
+    { step: "1", title: "Upload", desc: "Drag in any lease — residential, commercial, sectional title, or addendum. PDF, Word, scanned — RealEstateMeta handles it." },
+    { step: "2", title: "Ask", desc: 'Ask any question in plain English. "What are the escalation terms?" "When does this lease renew?" "What are my maintenance obligations?" "Flag every clause that favours the tenant."' },
+    { step: "3", title: "Act", desc: "Get precise, sourced answers with clause references. Export, share with your team, or keep interrogating. Your lease portfolio is yours to command." },
+  ];
+
+  const faqs = [
+    { q: "Is my lease data safe?", a: "Yes. RealEstateMeta uses enterprise-grade encryption, and we never retain your data on third-party model infrastructure. Your documents are processed and purged. Our architecture is POPIA-compliant because we believe property AI without bulletproof security isn't property AI — it's a liability." },
+    { q: "Does it actually understand leases, or is this just ChatGPT with a skin?", a: "RealEstateMeta is purpose-built for lease document analysis. It understands clause structures, escalation formulas, renewal mechanisms, and South African property terminology. It doesn't hallucinate — every answer is grounded in the document you uploaded, with clause references you can verify." },
+    { q: "Will this replace my property manager?", a: "No. It'll make them ten times more useful. RealEstateMeta handles the reading and extraction so your team can focus on negotiation, tenant relations, and the strategic decisions that actually grow your portfolio." },
+    { q: "What lease types does it support?", a: "Commercial leases, residential leases, sectional title leases, industrial leases, ground leases, addendums, side letters, lease amendments — if it's a lease document, RealEstateMeta can read it. PDF, Word and scanned documents are all supported." },
+    { q: "How long does analysis actually take?", a: "A typical 50-page lease is fully analysed in under 30 seconds. Longer or more complex documents take proportionally longer, but we're talking minutes, not the hours or days you're used to." },
+    { q: "Can I analyse my whole portfolio at once?", a: "Yes. Upload your entire lease book and interrogate it as a single dataset. Ask portfolio-wide questions like \"Which leases expire in the next 12 months?\" or \"Show me all tenants with escalation rates below 7%.\"" },
+    { q: "Is it compliant with South African legislation?", a: "Our platform is built with POPIA compliance at its core. We process data within secure, encrypted environments and retain nothing after your session. We can also help you identify clauses in your leases that may need updating for Rental Housing Act or Consumer Protection Act compliance." },
+  ];
+
+  return (
+    <div className="min-h-screen relative bg-white flex flex-col font-sans text-slate-900 overflow-hidden">
+      {/* ── NAV ── */}
+      <nav className="sticky top-0 z-50 w-full h-18 px-8 flex items-center justify-between border-b border-slate-200 bg-white/80 backdrop-blur-xl">
+        <div className="flex items-center">
+          <img src="/rem-logo.png" alt="REM-Leases" className="h-8" />
+        </div>
+        <div className="flex items-center gap-6">
+          <a href="#features" className="text-sm font-medium text-slate-600 hover:text-brand-blue hidden md:block transition-colors">Features</a>
+          <a href="#security" className="text-sm font-medium text-slate-600 hover:text-brand-blue hidden md:block transition-colors">Security</a>
+          <a href="#faq" className="text-sm font-medium text-slate-600 hover:text-brand-blue hidden md:block transition-colors">FAQ</a>
+          {!token ? (
+            <>
+              <Link to="/login" className="text-sm font-medium text-slate-600 hover:text-brand-blue transition-colors">Login</Link>
+              <Link to="/app" className="bg-brand-blue text-white text-sm font-bold px-5 py-2.5 rounded-full shadow-md hover:shadow-lg transition-all">Try it free</Link>
+              <Link to="/signup" className="bg-brand-accent text-white text-sm font-bold px-5 py-2.5 rounded-full shadow-md hover:shadow-lg transition-all hidden md:inline-flex">Register Firm</Link>
+            </>
+          ) : (
+            <Link to="/app" className="bg-brand-blue text-white text-sm font-bold px-5 py-2.5 rounded-full hover:bg-brand-blue-dark transition-colors shadow-md hover:shadow-lg">Go to Workspace</Link>
+          )}
+        </div>
+      </nav>
+
+      {/* ── HERO ── */}
+      <section className="flex flex-col items-center justify-center text-center px-6 pt-24 pb-20 bg-slate-50 relative z-10 border-b border-slate-200">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-brand-accent/30 bg-white text-brand-accent text-[11px] font-bold uppercase tracking-widest mb-8 shadow-sm">
+            LEKKER FAST. DEAD ACCURATE. PORTFOLIO READY.
+          </div>
+          <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900 leading-tight tracking-tight mb-6">
+            Your leases have answers.<br />Stop digging through filing cabinets. Start asking.
+          </h1>
+          <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed mb-10">
+            lease.realestatemeta.ai reads your entire lease portfolio the way you wish your property manager could — in seconds, not days. Upload any lease. Ask any question. Get answers with clause references you can verify.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link to="/app" className="bg-brand-blue text-white font-bold px-8 py-4 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm border border-transparent">
+              Upload your first lease — it's free
+            </Link>
+            <span className="text-xs text-slate-500">No credit card. No setup. Just answers.</span>
+          </div>
+        </motion.div>
+        {/* Hero dropzone for guests */}
+        {!token && (
+          <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.15 }} className="w-full max-w-xl mt-14">
+            <LandingDropzone navigate={navigate} />
+          </motion.div>
+        )}
+        {token && (
+          <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.15 }} className="mt-14">
+            <div onClick={() => navigate('/app')} className="glass-panel rounded-2xl p-10 text-center cursor-pointer hover:border-brand-blue/50 hover:shadow-lg transition-all bg-white">
+              <FolderOpen size={48} className="mx-auto mb-4 text-brand-blue" />
+              <h3 className="font-bold text-slate-900 text-lg mb-1">Open Property Portfolios</h3>
+              <p className="text-slate-500 text-sm">Continue to your matters →</p>
+            </div>
+          </motion.div>
+        )}
+      </section>
+
+      {/* ── SOCIAL PROOF ── */}
+      <section className="bg-slate-50 border-y border-slate-200 px-6 py-10 text-center relative z-10">
+        <p className="text-slate-600 text-sm max-w-2xl mx-auto leading-relaxed">
+          Trusted by landlords, asset managers and property professionals who manage portfolios — not paperwork.
+        </p>
+        <div className="flex items-center justify-center gap-2 mt-4 text-xs text-brand-blue font-bold uppercase tracking-widest">
+          <Lock size={12} /> POPIA Compliant &nbsp;·&nbsp; <Shield size={12} className="text-brand-accent" /> End-to-end encrypted &nbsp;·&nbsp; <Zap size={12} /> Results in 30 seconds
+        </div>
+      </section>
+
+      {/* ── PROBLEM ── */}
+      <section className="px-6 py-24 max-w-4xl mx-auto w-full relative z-10">
+        <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-14 text-center">The property management problem.</h2>
+        <div className="grid md:grid-cols-3 gap-8">
+          {[
+            { pain: "Manual lease extraction is slow and error-prone.", detail: "Reading through every lease to find termination rights, maintenance obligations, or escalation formulas takes hours per document. Multiply that across a portfolio and it becomes impossible." },
+            { pain: "You have no portfolio-wide visibility.", detail: "Which leases have favourable escalation clauses? Which tenants have first right of refusal? Nobody knows without manual digging through hundreds of pages." },
+            { pain: "Compliance risk and costly legal reviews.", detail: "Non-compliance with POPIA and the Rental Housing Act carries heavy fines. Sending every lease to an attorney at R2,500/hour for routine clauses is wasteful." },
+          ].map((p, i) => (
+            <div key={i} className="border-l-4 border-brand-accent/30 pl-5 bg-white p-6 shadow-sm rounded-xl border-y border-r border-slate-100">
+              <p className="font-bold text-slate-900 text-sm mb-2">{p.pain}</p>
+              <p className="text-slate-600 text-sm leading-relaxed">{p.detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── FEATURES ── */}
+      {/* ── FEATURES ── */}
+      <section id="features" className="bg-white px-6 py-24 relative z-10 grid-bg">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-4 text-center">
+            Three things that change how you manage your leases.
+          </h2>
+          <p className="text-slate-500 text-center mb-16 text-sm">Purpose-built for property. Not repurposed from a legal tool.</p>
+          <div className="grid md:grid-cols-3 gap-6">
+            {features.map((f) => (
+              <div key={f.number} className="p-6 group relative overflow-hidden bg-white border border-slate-200 shadow-sm rounded-2xl cursor-default hover:shadow-md transition-shadow">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-brand-blue/5 group-hover:bg-brand-blue/10 transition-all rounded-full pointer-events-none -mr-10 -mt-10" />
+                <div className="flex items-center gap-2 mb-4 relative z-10">
+                  <span className="text-brand-accent font-mono font-bold text-xs">{f.number}</span>
+                  <span className="text-slate-500 text-xs uppercase tracking-widest font-medium group-hover:text-brand-blue transition-colors">{f.title}</span>
+                </div>
+                <h3 className="text-slate-900 font-bold text-base mb-3 leading-snug relative z-10">{f.hook}</h3>
+                <p className="text-slate-600 text-sm leading-relaxed mb-6 relative z-10">{f.body}</p>
+                <div className="flex flex-wrap gap-2 relative z-10 mt-auto pt-4 border-t border-slate-100">
+                  {f.details.map((d, i) => (
+                    <span key={i} className="text-[10px] text-brand-blue font-semibold bg-brand-blue/5 px-2.5 py-1 rounded-full border border-brand-blue/20">{d}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── HOW IT WORKS ── */}
+      <section className="px-6 py-24 max-w-4xl mx-auto w-full relative z-10">
+        <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 text-center mb-16">Three steps. That's it.</h2>
+        <div className="grid md:grid-cols-3 gap-6">
+          {steps.map((s) => (
+            <div key={s.step} className="p-8 relative overflow-hidden group bg-slate-50 border border-slate-200 shadow-sm rounded-2xl cursor-default hover:border-brand-accent/30 hover:shadow-md transition-all">
+              <div className="absolute -right-6 -top-6 text-9xl font-black text-slate-200 group-hover:text-brand-accent/10 transition-colors duration-500 pointer-events-none">{s.step}</div>
+              <div className="text-3xl font-extrabold text-brand-accent mb-4 relative z-10">{s.title}</div>
+              <h3 className="font-bold text-lg mb-2 relative z-10 text-brand-blue hidden">{s.title}</h3>
+              <p className="text-slate-600 text-sm leading-relaxed relative z-10">{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section id="faq" className="bg-slate-50 border-y border-slate-200 px-6 py-24 relative z-10">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 text-center mb-14">Questions you should be asking.</h2>
+          <div className="divide-y divide-slate-200">
+            {faqs.map((item, i) => (
+              <div key={i} className="py-5 cursor-pointer group" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
+                <div className="flex justify-between items-center gap-4">
+                  <span className="font-semibold text-slate-900 text-sm group-hover:text-brand-blue transition-colors">{item.q}</span>
+                  <span className={`text-slate-400 text-xl transition-transform duration-200 group-hover:text-brand-accent ${openFaq === i ? 'rotate-45 text-brand-accent' : ''}`}>+</span>
+                </div>
+                {openFaq === i && (
+                  <p className="mt-4 text-slate-600 text-sm leading-relaxed pr-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">{item.a}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FINAL CTA ── */}
+      <section id="security" className="px-6 py-24 relative z-10">
+        <div className="max-w-2xl mx-auto bg-white border border-slate-200 rounded-3xl p-12 text-center relative overflow-hidden shadow-xl">
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-blue/5 to-transparent opacity-50 pointer-events-none"></div>
+          <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-4 leading-tight relative z-10">
+            Your next lease review is waiting.<br />Stop reading. Start asking.
+          </h2>
+          <p className="text-slate-600 text-sm mb-8 relative z-10">Upload your first lease and see what RealEstateMeta finds in 30 seconds.</p>
+          <Link to="/app" className="inline-block bg-brand-blue text-white font-bold px-8 py-4 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm relative z-10">
+            Try it free
+          </Link>
+          <p className="text-slate-500 text-xs mt-6 relative z-10">No credit card required.</p>
+          <p className="text-slate-500 text-xs mt-2 relative z-10">Prefer a walkthrough? <Link to="/how-to" className="text-brand-blue hover:underline font-semibold">Book a 15-minute demo</Link> with our team.</p>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer className="border-t border-slate-200 bg-white px-8 py-10 flex flex-col md:flex-row items-center justify-between gap-6 text-sm relative z-10">
+        <img src="/rem-logo.png" alt="REM-Leases" className="h-7" />
+        <div className="flex flex-wrap items-center justify-center gap-6 text-slate-500 text-xs font-medium">
+          <Link to="/how-to" className="hover:text-slate-900 transition-colors">How to Use</Link>
+          <Link to="/privacy" className="hover:text-slate-900 transition-colors">Privacy Policy</Link>
+          <Link to="/terms" className="hover:text-slate-900 transition-colors">Terms &amp; Conditions</Link>
+          <Link to="/pricing" className="hover:text-brand-blue transition-colors">Enterprise Pricing</Link>
+        </div>
+        <p className="text-xs text-slate-400">© {new Date().getFullYear()} RealEstateMeta — Lekker fast. Dead accurate. Portfolio ready.</p>
+      </footer>
+
+    </div>
+  );
+}
+
+
+
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AuthProvider>
+          <Router>
+              <Routes>
+                  <Route path="/" element={<LandingPage />} />
+                  <Route path="/login" element={<AuthScreen isLogin={true} />} />
+                  <Route path="/signup" element={<AuthScreen isLogin={false} />} />
+                  
+                  <Route path="/terms" element={<TermsConditions />} />
+                  <Route path="/privacy" element={<PrivacyPolicy />} />
+                  <Route path="/how-to" element={<HowToUse />} />
+
+                  <Route path="/app" element={
+                      <ProtectedRoute>
+                          <InnerApp />
+                      </ProtectedRoute>
+                  } />
+                  
+                  <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+          </Router>
+      </AuthProvider>
+    </ErrorBoundary>
+  );
+}

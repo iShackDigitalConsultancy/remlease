@@ -1,0 +1,10 @@
+{
+  "buildCommand": "cd lexichat-ui && npm install && npm run build && cd .. && rm -rf dist && cp -R lexichat-ui/dist dist",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

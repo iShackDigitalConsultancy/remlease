@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 50" width="440" height="50">
+  <!-- REM-Leases — Wordmark Only — Dark Background -->
+  <text x="0" y="38" font-family="'Helvetica Neue', Arial, sans-serif" font-size="40px" font-weight="500" letter-spacing="-1px">
+    <tspan fill="#f1f5f9">REM</tspan><tspan fill="#22d3ee">-Leases</tspan>
+  </text>
+  <text x="310" y="38" font-family="'Helvetica Neue', Arial, sans-serif">
+    <tspan fill="#fbbf24" font-size="44px" font-weight="500">.</tspan><tspan fill="#64748b" font-size="30px" font-weight="400">ai</tspan>
+  </text>
+</svg>

@@ -1,0 +1,8 @@
+lexichat-ui/
+lexichat-api/venv/
+lexichat-api/__pycache__/
+lexichat-api/lancedb_data/
+lexichat-api/*.db
+lexichat-api/uploads/
+lexichat-api/.env
+.vercel/
