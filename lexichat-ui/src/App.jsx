@@ -86,6 +86,19 @@ function InnerApp() {
   const [docBriefs, setDocBriefs] = useState({}); // doc_id → brief object
 
   useEffect(() => { activeCaseIdRef.current = activeCaseId; }, [activeCaseId]);
+
+  // Fetch document brief when selected
+  useEffect(() => {
+    if (selectedDocId && !docBriefs[selectedDocId]) {
+      api.get(`/documents/${selectedDocId}/brief`)
+        .then(res => {
+          if (res.data && res.data.brief) {
+            setDocBriefs(prev => ({ ...prev, [selectedDocId]: res.data.brief }));
+          }
+        })
+        .catch(err => console.error("Failed to fetch brief:", err));
+    }
+  }, [selectedDocId]);
   useEffect(() => {
     if (activeCaseId) localStorage.setItem('rem-leases_active_case', activeCaseId);
     else localStorage.removeItem('rem-leases_active_case');
@@ -565,9 +578,17 @@ function InnerApp() {
           <div className="flex items-center gap-3">
              <img src="/rem-logo.png" alt="REM-Leases" className="h-7 cursor-pointer" onClick={() => navigate('/')} />
           </div>
-          <button onClick={logout} title="Sign Out" className="p-1.5 rounded bg-transparent hover:bg-slate-100 hover:text-red-500 text-slate-400 transition-colors">
-              <LogOut size={16} />
-          </button>
+          <div className="flex items-center gap-3">
+              {user && (
+                <div className="text-right">
+                    <div className="text-[11px] font-bold text-slate-800">{user.full_name}</div>
+                    {user.role && <div className="text-[9px] text-brand-blue bg-brand-blue/10 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest mt-0.5 inline-block">{user.role}</div>}
+                </div>
+              )}
+              <button onClick={logout} title="Sign Out" className="p-1.5 rounded bg-transparent hover:bg-slate-100 hover:text-red-500 text-slate-400 transition-colors">
+                  <LogOut size={16} />
+              </button>
+          </div>
         </div>
         
         <div className="p-4 flex-grow flex flex-col min-h-0 overflow-y-auto bg-slate-50">
@@ -1176,7 +1197,7 @@ function InnerApp() {
                  <summary className="flex items-center justify-between px-4 py-2.5 cursor-pointer list-none select-none hover:bg-amber-50 transition-colors">
                    <span className="flex items-center gap-2 text-xs font-bold text-amber-700 uppercase tracking-widest">
                      <Zap size={12} className="text-amber-500" />
-                     Document Brief
+                     Document Details
                      {brief.doc_type && <span className="font-normal text-amber-600 normal-case tracking-normal ml-1">— {brief.doc_type}</span>}
                    </span>
                    <ChevronRight size={14} className="text-amber-500 group-open:rotate-90 transition-transform" />
@@ -1184,7 +1205,7 @@ function InnerApp() {
                  <div className="px-4 pb-4 pt-1 space-y-3 text-xs">
                    {/* Summary */}
                    {brief.summary && (
-                     <p className="text-slate-300 leading-relaxed">{brief.summary}</p>
+                     <p className="text-slate-600 leading-relaxed font-medium bg-white p-2 border border-amber-200 shadow-sm rounded-md">{brief.summary}</p>
                    )}
                    {/* Parties */}
                    {brief.parties?.length > 0 && (
@@ -1192,7 +1213,7 @@ function InnerApp() {
                        <p className="font-bold text-slate-500 uppercase tracking-widest text-[10px] mb-1">Parties</p>
                        <div className="flex flex-wrap gap-1.5">
                          {brief.parties.map((p, i) => (
-                           <span key={i} className="bg-white/5 border border-white/10 text-slate-300 px-2 py-0.5 rounded-full font-medium">{p}</span>
+                           <span key={i} className="bg-white border border-slate-200 shadow-sm text-slate-700 px-2 py-0.5 rounded-full font-medium">{p}</span>
                          ))}
                        </div>
                      </div>
@@ -1201,28 +1222,43 @@ function InnerApp() {
                    {brief.key_dates?.length > 0 && (
                      <div>
                        <p className="font-bold text-slate-500 uppercase tracking-widest text-[10px] mb-1">Key Dates</p>
-                       <div className="space-y-1">
+                       <div className="space-y-1 bg-white p-2 rounded-md shadow-sm border border-slate-200">
                          {brief.key_dates.map((d, i) => (
-                           <div key={i} className="flex justify-between text-slate-400">
-                             <span className="text-slate-400">{d.label}</span>
-                             <span className="font-semibold">{d.value}</span>
+                           <div key={i} className="flex justify-between text-slate-700">
+                             <span className="text-slate-500">{d.label}</span>
+                             <span className="font-bold text-slate-800">{d.value}</span>
                            </div>
                          ))}
                        </div>
                      </div>
                    )}
-                   {/* Risks */}
-                   {brief.risks?.filter(r => r).length > 0 && (
+                   {/* Financial Terms */}
+                   {brief.financial_terms?.length > 0 && (
                      <div>
-                       <p className="font-bold text-slate-500 uppercase tracking-widest text-[10px] mb-1">Risk Flags</p>
-                       <ul className="space-y-1">
-                         {brief.risks.filter(r => r).map((r, i) => (
-                           <li key={i} className="flex items-start gap-1.5 text-amber-700">
-                             <span className="mt-0.5 shrink-0">⚠</span>
-                             <span>{r}</span>
-                           </li>
+                       <p className="font-bold text-slate-500 uppercase tracking-widest text-[10px] mb-1">Financial Terms</p>
+                       <ul className="space-y-1 list-disc pl-4 text-slate-700 text-[11px] leading-relaxed">
+                         {brief.financial_terms.map((r, i) => (
+                           <li key={i}>{r}</li>
                          ))}
                        </ul>
+                     </div>
+                   )}
+                   {/* Obligations */}
+                   {brief.obligations?.length > 0 && (
+                     <div>
+                       <p className="font-bold text-slate-500 uppercase tracking-widest text-[10px] mb-1">Core Obligations</p>
+                       <ul className="space-y-1 list-disc pl-4 text-slate-700 text-[11px] leading-relaxed">
+                         {brief.obligations.map((r, i) => (
+                           <li key={i}>{r}</li>
+                         ))}
+                       </ul>
+                     </div>
+                   )}
+                   {/* Execution Status */}
+                   {brief.execution_status && (
+                     <div>
+                       <p className="font-bold text-slate-500 uppercase tracking-widest text-[10px] mb-1">Execution Status</p>
+                       <p className="text-amber-800 font-medium bg-amber-100/50 p-2 rounded-md border border-amber-200 text-[11px]">{brief.execution_status}</p>
                      </div>
                    )}
                  </div>
@@ -1303,7 +1339,7 @@ function LandingDropzone({ navigate }) {
         <>
           <h3 className="text-2xl font-bold text-slate-900 mb-2">Drop a PDF to try for free</h3>
           <p className="text-slate-600 mb-6 font-medium">
-            No sign-up needed. Upload any residential or commercial lease and start asking questions immediately.
+            Upload any residential or commercial lease for a Free Audit. Start extracting dates and risks immediately.
           </p>
           <div className="inline-flex items-center gap-2 bg-brand-blue hover:bg-brand-blue-dark text-white font-bold px-8 py-3 rounded-full shadow-md hover:shadow-lg transition-all text-sm border border-transparent">
             <UploadCloud size={16} /> Select a PDF
@@ -1338,10 +1374,10 @@ function LandingPage() {
     },
     {
       number: "03",
-      title: "Enterprise Security",
+      title: "Firm Tier & Agency White-Labeling",
       hook: "Your tenant data stays yours. Full stop.",
-      body: "POPIA-compliant architecture, end-to-end encryption, and zero data retention on third-party models. Your lease documents contain sensitive commercial and personal information — we treat them accordingly.",
-      details: ["End-to-end encryption at rest and in transit","Zero data retention on external AI models","POPIA-compliant data handling","Full audit trail for every query"],
+      body: "Generate branded PDF risk-reports to send to your landlord clients. Pass the software cost onto landlords as an administration fee while keeping data strictly POPIA-compliant with enterprise encryption.",
+      details: ["Client-branded PDF Risk Reports","Pass-through software billing","POPIA-compliant and Encrypted","Portfolio-wide firm administration"],
     },
   ];
 
@@ -1398,9 +1434,9 @@ function LandingPage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to="/app" className="bg-brand-blue text-white font-bold px-8 py-4 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm border border-transparent">
-              Upload your first lease — it's free
+              Get your Free AI Lease Audit
             </Link>
-            <span className="text-xs text-slate-500">No credit card. No setup. Just answers.</span>
+            <span className="text-xs text-slate-500">No credit card. Free risk audit. Instant answers.</span>
           </div>
         </motion.div>
         {/* Hero dropzone for guests */}
@@ -1518,7 +1554,7 @@ function LandingPage() {
           <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-4 leading-tight relative z-10">
             Your next lease review is waiting.<br />Stop reading. Start asking.
           </h2>
-          <p className="text-slate-600 text-sm mb-8 relative z-10">Upload your first lease and see what RealEstateMeta finds in 30 seconds.</p>
+          <p className="text-slate-600 text-sm mb-8 relative z-10">Drop your first lease below to get your Free Audit. Discover risks and missing clauses in 30 seconds.</p>
           <Link to="/app" className="inline-block bg-brand-blue text-white font-bold px-8 py-4 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm relative z-10">
             Try it free
           </Link>

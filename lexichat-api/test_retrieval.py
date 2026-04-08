@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
-index = pc.Index("rem-leases")
+index = pc.Index("lekkerpilot")
 
 print("Checking index stats:")
 print(index.describe_index_stats())

@@ -7,7 +7,7 @@ from groq import Groq
 
 load_dotenv()
 pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
-index = pc.Index("rem-leases")
+index = pc.Index("lekkerpilot")
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 

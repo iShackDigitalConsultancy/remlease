@@ -15,7 +15,7 @@ if not PINECONE_API_KEY:
     sys.exit(1)
 
 pc = Pinecone(api_key=PINECONE_API_KEY)
-index_name = "rem-leases"
+index_name = "lekkerpilot"
 if index_name not in pc.list_indexes().names():
     from pinecone import ServerlessSpec
     print(f"Index {index_name} not found. Creating it...")

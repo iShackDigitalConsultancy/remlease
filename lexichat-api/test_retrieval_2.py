@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
-index = pc.Index("rem-leases")
+index = pc.Index("lekkerpilot")
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 query = "can you amend your plea one day before trial?"

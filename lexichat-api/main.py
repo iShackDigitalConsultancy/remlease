@@ -114,25 +114,28 @@ def smart_chunk(text: str, page_num: int, max_chars: int = 900, overlap: int = 1
 def analyze_document_brief(doc_id: str, filename: str, sample_text: str) -> dict:
     """Run a structured Groq extraction and return a JSON brief."""
     prompt = (
-        "You are a senior South African legal analyst. Analyse the following document extract "
-        "and respond with ONLY valid JSON — no markdown fences, no commentary.\n\n"
+        "You are a senior South African legal analyst. Analyse the following document extract, "
+        "which may contain dirty OCR from a signed/scanned lease or contract. "
+        "Read carefully through any garbled text to find the core entities.\n\n"
+        "Respond with ONLY valid JSON — no markdown fences, no commentary.\n"
         "Return exactly this structure:\n"
         '{\n'
-        '  "doc_type": "short document type e.g. Sale of Shares Agreement, Particulars of Claim, NDA",\n'
+        '  "doc_type": "short document type e.g. Commercial Lease, Sale of Shares, NDA",\n'
         '  "parties": ["Party A Name", "Party B Name"],\n'
-        '  "governing_law": "e.g. Republic of South Africa",\n'
-        '  "key_dates": [{"label": "Effective Date", "value": "1 March 2024"}],\n'
-        '  "risks": ["Risk 1 in one sentence", "Risk 2", "Risk 3"],\n'
+        '  "obligations": ["Key obligation 1", "Key obligation 2"],\n'
+        '  "financial_terms": ["Rent/Payment amounts", "Deposits", "Escalations if any"],\n'
+        '  "key_dates": [{"label": "Commencement/Effective Date", "value": "1 March 2024"}],\n'
+        '  "execution_status": "Briefly state if signatures appear present or if it looks like an unsigned draft",\n'
         '  "summary": "Two-sentence plain English summary of the document."\n'
         '}\n\n'
-        f"DOCUMENT: {filename}\n\nEXTRACT:\n{sample_text[:6000]}"
+        f"DOCUMENT: {filename}\n\nEXTRACT:\n{sample_text[:8000]}"
     )
     try:
         resp = groq_client.chat.completions.create(
             model='llama-3.3-70b-versatile',
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.1,
-            max_tokens=600
+            max_tokens=800
         )
         raw = resp.choices[0].message.content.strip()
         # Strip accidental markdown fences
@@ -140,7 +143,15 @@ def analyze_document_brief(doc_id: str, filename: str, sample_text: str) -> dict
         return json.loads(raw)
     except Exception as e:
         print(f"Brief generation failed: {e}")
-        return {"doc_type": "Legal Document", "parties": [], "governing_law": "", "key_dates": [], "risks": [], "summary": ""}
+        return {
+            "doc_type": "Legal Document", 
+            "parties": [], 
+            "obligations": [], 
+            "financial_terms": [], 
+            "key_dates": [], 
+            "execution_status": "Unknown", 
+            "summary": ""
+        }
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -209,7 +220,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = create_access_token(data={"sub": user.id})
-    return {"access_token": access_token, "token_type": "bearer", "user": {"id": user.id, "email": user.email, "full_name": user.full_name, "firm_id": user.firm_id}}
+    return {"access_token": access_token, "token_type": "bearer", "user": {"id": user.id, "email": user.email, "full_name": user.full_name, "firm_id": user.firm_id, "role": user.role}}
 
 @app.get("/api/workspaces")
 def get_workspaces(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -308,9 +319,35 @@ def delete_document(doc_id: str, current_user: Optional[models.User] = Depends(g
 
 def analyze_document_brief_background(doc_id: str, filename: str, sample_text: str):
     try:
-        analyze_document_brief(doc_id, filename, sample_text)
+        brief = analyze_document_brief(doc_id, filename, sample_text)
+        with open(f"./uploads/{doc_id}_brief.json", "w") as f:
+            json.dump(brief, f)
     except Exception as e:
         print(f"Background brief extraction failed: {e}")
+
+@app.get("/api/documents/{doc_id}/brief")
+def get_document_brief(doc_id: str, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if current_user:
+        doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+            (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
+            models.Workspace.firm_id == current_user.firm_id
+        ).first()
+    else:
+        doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+            (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
+            models.Workspace.session_id == x_session_id
+        ).first()
+        
+    if not doc:
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    file_path = f"./uploads/{doc_id}_brief.json"
+    if not os.path.exists(file_path):
+        return {"brief": None}
+        
+    with open(file_path, "r") as f:
+        brief = json.load(f)
+    return {"brief": brief}
 
 @app.post("/api/upload/{workspace_id}")
 async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file: UploadFile = File(...), current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
