@@ -1,0 +1,8 @@
+lexichat-api/venv/
+lexichat-api/__pycache__/
+lexichat-api/lancedb_data/
+lexichat-api/uploads/
+.git/
+lexichat-ui/
+node_modules/
+.pytest_cache/
