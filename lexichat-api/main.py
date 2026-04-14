@@ -382,12 +382,25 @@ async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file:
     full_markdown = ""
     
     if not llama_api_key:
-        print("WARNING: LLAMA_CLOUD_API_KEY is missing. Falling back to native PyMuPDF text extraction. Scanned images will be ignored.")
+        print("WARNING: LLAMA_CLOUD_API_KEY is missing. Falling back to native PyMuPDF and Tesseract OCR.")
         import fitz
         try:
             doc = fitz.open(file_path_saved)
             for i, page in enumerate(doc):
                 text = page.get_text()
+                
+                # If PyMuPDF couldn't find text, it's likely a scanned image
+                if len(text.strip()) < 50:
+                    try:
+                        import pytesseract
+                        import pdf2image
+                        # Convert just this page to image to save memory (pages are 1-indexed in pdf2image)
+                        images = pdf2image.convert_from_path(file_path_saved, first_page=i+1, last_page=i+1)
+                        if images:
+                            text = pytesseract.image_to_string(images[0])
+                    except Exception as ocr_e:
+                        print(f"Fallback OCR failed on page {i+1}: {ocr_e}")
+
                 page_num = i + 1
                 full_markdown += f"\n<!-- PAGE {page_num} START -->\n{text}\n"
                 if text.strip():
@@ -657,6 +670,240 @@ If a date is vague (e.g. "Early 2023"), express it as roughly as possible inside
     except Exception as e:
         print(f"Timeline extraction failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to extract timeline from documents")
+
+class ExpiryExtractionRequest(BaseModel):
+    doc_ids: List[str]
+
+@app.post("/api/extract-expiries")
+async def extract_expiries(payload: ExpiryExtractionRequest, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if not payload.doc_ids:
+        raise HTTPException(status_code=400, detail="No documents selected")
+        
+    full_text: str = ""
+    for doc_id in payload.doc_ids:
+        if current_user is not None:
+            doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+                (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
+                models.Workspace.firm_id == current_user.firm_id
+            ).first()
+        else:
+            doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+                (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
+                models.Workspace.session_id == x_session_id
+            ).first()
+            
+        if not doc:
+            raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
+            
+        file_path = f"./uploads/{doc_id}.md"
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "r") as f:
+                    doc_text = f.read()
+                full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{str(doc_text)[:12000]}\n"
+            except Exception as e:
+                print(f"Failed to read {file_path}: {e}")
+                
+    if not full_text:
+        raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
+        
+    full_text = str(full_text)[:18000]
+
+    prompt = f"""You are a senior legal analyst extracting crucial dates from multiple contracts to trigger calendar/SmartBuilding events.
+
+DOCUMENTS TEXT:
+{full_text}
+
+INSTRUCTIONS:
+Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
+Output ONLY valid JSON matching this exact structure:
+{{
+  "expiries": [
+    {{
+      "document": "contract_name.pdf",
+      "expiry_date": "YYYY-MM-DD",
+      "renewal_deadline": "YYYY-MM-DD",
+      "clause": "Text of the clause governing renewal/termination",
+      "action_required": "Short description of what must happen"
+    }}
+  ]
+}}
+
+If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD" or leave it null. Return ONLY the JSON object."""
+    
+    try:
+        resp = groq_client.chat.completions.create(
+            model='llama-3.3-70b-versatile',
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.0,
+            max_tokens=2000
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        result = json.loads(raw)
+        return {"data": result}
+    except Exception as e:
+        print(f"Expiry extraction failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to extract expiry dates from documents")
+
+class GapAnalysisRequest(BaseModel):
+    doc_ids: List[str]
+
+@app.post("/api/gap-analysis")
+async def gap_analysis(payload: GapAnalysisRequest, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if len(payload.doc_ids) < 2:
+        raise HTTPException(status_code=400, detail="At least two documents required to run a gap analysis.")
+        
+    full_text: str = ""
+    for doc_id in payload.doc_ids:
+        if current_user is not None:
+            doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+                (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
+                models.Workspace.firm_id == current_user.firm_id
+            ).first()
+        else:
+            doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+                (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
+                models.Workspace.session_id == x_session_id
+            ).first()
+            
+        if not doc:
+            raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
+            
+        file_path = f"./uploads/{doc_id}.md"
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "r") as f:
+                    doc_text = f.read()
+                full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{str(doc_text)[:12000]}\n"
+            except Exception as e:
+                print(f"Failed to read {file_path}: {e}")
+                
+    if not full_text:
+        raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
+        
+    full_text = str(full_text)[:24000]
+
+    prompt = f"""You are a master commercial real estate and franchise attorney.
+The user has uploaded multiple documents. Your job is to automatically detect which is the Franchise Agreement and which is the Lease Agreement. Then, cross-reference them to find gaps, conflicts, and risks. 
+Provide key terms and a critical mismatch report.
+
+DOCUMENTS TEXT:
+{full_text}
+
+INSTRUCTIONS:
+Output exactly this JSON structure:
+{{
+  "detected_lease": "FileName (or null)",
+  "detected_franchise": "FileName (or null)",
+  "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
+  "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
+  "gaps": [
+    {{
+      "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
+      "franchise_requirement": "What does the franchise demand?",
+      "lease_provision": "What does the lease actually say?",
+      "status": "RISK" or "MATCH" or "WARNING"
+    }}
+  ]
+}}
+
+If only one document type is uploaded, map whatever you can and put 'null' for the missing one.
+Return ONLY valid JSON."""
+    
+    try:
+        resp = groq_client.chat.completions.create(
+            model='llama-3.3-70b-versatile',
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.0,
+            max_tokens=3000
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        result = json.loads(raw)
+        return {"data": result}
+    except Exception as e:
+        print(f"Gap analysis failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to run franchise vs lease gap analysis")
+
+@app.get("/api/portfolio-overview")
+async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if current_user:
+        docs = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+            models.Workspace.firm_id == current_user.firm_id
+        ).all()
+    elif x_session_id:
+        docs = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+            models.Workspace.session_id == x_session_id
+        ).all()
+    else:
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    if not docs:
+        return {"data": []}
+        
+    full_text = ""
+    # Process up to 10 documents, taking 6000 characters each to avoid heavy context limits.
+    for doc in docs[:10]:
+        file_path = f"./uploads/{doc.pinecone_doc_id}.md"
+        if not os.path.exists(file_path):
+            file_path = f"./uploads/{doc.id}.md"
+            
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "r") as f:
+                    doc_text = f.read()
+                full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{str(doc_text)[:6000]}\n"
+            except Exception as e:
+                pass
+                
+    if not full_text:
+        return {"data": []}
+
+    prompt = f"""You are an expert commercial leasing manager. Review the following portfolio of lease and franchise agreements.
+For each document provided, extract the critical terms for a global management dashboard.
+
+DOCUMENTS TEXT:
+{full_text}
+
+INSTRUCTIONS:
+Output exactly this JSON structure as an array of objects:
+[
+  {{
+    "filename": "Exact Name of the Document",
+    "doc_type": "Lease" OR "Franchise Agreement" OR "Unknown",
+    "expiry_date": "YYYY-MM-DD" (extract as strictly standard ISO date, or null if absolutely not specified),
+    "renewal_deadline": "YYYY-MM-DD" (or null if not found. Prioritize specific deadlines),
+    "key_terms": "1-sentence summary of the most important term or permitted use",
+    "flags": "Any major risks, unusual clauses or Management Alerts"
+  }}
+]
+Ensure the JSON is perfectly valid and is just the array. Do not output anything else.
+Ensure you include EVERY specific document listed in the text.
+"""
+    try:
+        resp = groq_client.chat.completions.create(
+            model='llama-3.3-70b-versatile',
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.0,
+            max_tokens=4000
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        result = json.loads(raw)
+        
+        # Attach workspace mapping for frontend navigation
+        for item in result:
+            matched_doc = next((d for d in docs if d.filename == item.get("filename")), None)
+            if matched_doc:
+                item["workspace_id"] = matched_doc.workspace_id
+                item["doc_id"] = matched_doc.id
+
+        return {"data": result}
+    except Exception as e:
+        print(f"Portfolio overview failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to run portfolio overview analysis")
+
 
 class CompareRequest(BaseModel):
     doc_id_a: str

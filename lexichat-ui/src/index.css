@@ -44,3 +44,10 @@
     @apply bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 drop-shadow-sm;
   }
 }
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 1cm;
+  }
+}

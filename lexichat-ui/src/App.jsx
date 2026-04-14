@@ -9,7 +9,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 import { 
   FileText, UploadCloud, MessageSquare, Send, CheckCircle2, 
-  Loader2, Scale, BookOpen, Clock, ChevronRight, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare
+  Loader2, Scale, BookOpen, Clock, ChevronRight, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare, Calendar, CalendarPlus, Database, BellRing, Layers, ExternalLink, Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
@@ -60,7 +60,7 @@ function InnerApp() {
   const [isFirmSearchActive, setIsFirmSearchActive] = useState(false);
   const [editingCaseId, setEditingCaseId] = useState(null);
   const [editingCaseName, setEditingCaseName] = useState("");
-  
+  const [sidebarSearch, setSidebarSearch] = useState('');
   // Audit Feature State
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [auditDocId, setAuditDocId] = useState(null);
@@ -68,6 +68,49 @@ function InnerApp() {
   const [auditResult, setAuditResult] = useState(null);
   const [isAuditing, setIsAuditing] = useState(false);
   
+  // Expiry Feature State
+  const [showExpiryModal, setShowExpiryModal] = useState(false);
+  const [expiryData, setExpiryData] = useState(null);
+  const [isExtractingExpiries, setIsExtractingExpiries] = useState(false);
+
+  // Portfolio Dashboard State
+  const [activeView, setActiveView] = useState('workspace'); // 'workspace' or 'portfolio'
+  const [portfolioData, setPortfolioData] = useState(null);
+  const [isFetchingPortfolio, setIsFetchingPortfolio] = useState(false);
+
+  const fetchPortfolioOverview = useCallback(async (forceRefresh = false) => {
+    if (!forceRefresh && portfolioData) return;
+    setIsFetchingPortfolio(true);
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
+      const res = await axios.get(`${API_BASE}/portfolio-overview`, { headers });
+      const sorted = res.data.data.sort((a,b) => {
+          if (!a.expiry_date && !b.expiry_date) return 0;
+          if (!a.expiry_date) return 1;
+          if (!b.expiry_date) return -1;
+          return new Date(a.expiry_date) - new Date(b.expiry_date);
+      });
+      setPortfolioData(sorted);
+    } catch(err) {
+      console.error(err);
+      alert("Failed to run portfolio overview.");
+    } finally {
+      setIsFetchingPortfolio(false);
+    }
+  }, [portfolioData, token, sessionId]);
+
+  useEffect(() => {
+     if(activeView === 'portfolio' && !portfolioData) {
+         fetchPortfolioOverview();
+     }
+  }, [activeView, portfolioData, fetchPortfolioOverview]);
+
+
+  // Gap Analysis Feature State
+  const [showGapModal, setShowGapModal] = useState(false);
+  const [gapReportData, setGapReportData] = useState(null);
+  const [isRunningGapAnalysis, setIsRunningGapAnalysis] = useState(false);
+
   // Timeline Feature State
   const [showTimelineModal, setShowTimelineModal] = useState(false);
   const [timelineData, setTimelineData] = useState(null);
@@ -90,7 +133,8 @@ function InnerApp() {
   // Fetch document brief when selected
   useEffect(() => {
     if (selectedDocId && !docBriefs[selectedDocId]) {
-      api.get(`/documents/${selectedDocId}/brief`)
+      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
+      axios.get(`${API_BASE}/documents/${selectedDocId}/brief`, { headers })
         .then(res => {
           if (res.data && res.data.brief) {
             setDocBriefs(prev => ({ ...prev, [selectedDocId]: res.data.brief }));
@@ -193,7 +237,7 @@ function InnerApp() {
   const createNewCase = async () => {
     try {
         const formData = new FormData();
-        formData.append('name', `New Matter ${cases.length + 1}`);
+        formData.append('name', `New Lease ${cases.length + 1}`);
         const headers = token ? { Authorization: `Bearer ${token}` } : { 'X-Session-Id': sessionId };
         const res = await axios.post(`${API_BASE}/workspaces`, formData, {
             headers
@@ -214,7 +258,8 @@ function InnerApp() {
   };
 
   const deleteCase = async (id) => {
-    if (window.confirm("Are you sure you want to delete this case for everyone in the firm?")) {
+    const confirmation = window.prompt("WARNING: This will permanently delete the property portfolio and all its documents for everyone in the firm.\n\nType 'DELETE' to confirm your action:");
+    if (confirmation === 'DELETE') {
         try {
             const headers = token ? { Authorization: `Bearer ${token}` } : { 'X-Session-Id': sessionId };
             await axios.delete(`${API_BASE}/workspaces/${id}`, {
@@ -224,8 +269,10 @@ function InnerApp() {
             if (activeCaseId === id) setActiveCaseId(null);
         } catch (e) {
             console.error(e);
-            alert("Failed to delete workspace.");
+            alert("Failed to delete property portfolio.");
         }
+    } else if (confirmation !== null) {
+        alert("Deletion cancelled. You must type 'DELETE' exactly.");
     }
   };
 
@@ -422,6 +469,67 @@ function InnerApp() {
     }
   };
 
+  const executeGapAnalysis = async () => {
+    const activeDocIds = library.map(d => d.id);
+    if (activeDocIds.length < 2) return alert("Please upload at least TWO documents (a Lease and a Franchise Agreement) to run Gap Analysis.");
+    
+    setIsRunningGapAnalysis(true);
+    setShowGapModal(true);
+    setGapReportData(null);
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
+      const res = await axios.post(`${API_BASE}/gap-analysis`, { doc_ids: activeDocIds }, { headers });
+      setGapReportData(res.data.data);
+    } catch (err) {
+      alert("Failed to run gap analysis.");
+      setShowGapModal(false);
+    } finally {
+      setIsRunningGapAnalysis(false);
+    }
+  };
+
+  const executeExpiryExtraction = async () => {
+    const activeDocIds = library.map(d => d.id);
+    if (activeDocIds.length === 0) return alert("Please upload documents to scan expiries.");
+    
+    setIsExtractingExpiries(true);
+    setShowExpiryModal(true);
+    setExpiryData(null);
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
+      const res = await axios.post(`${API_BASE}/extract-expiries`, { doc_ids: activeDocIds }, { headers });
+      setExpiryData(res.data.data);
+    } catch (err) {
+      alert("Failed to extract expiry dates.");
+      setShowExpiryModal(false);
+    } finally {
+      setIsExtractingExpiries(false);
+    }
+  };
+
+  const generateICS = (expiry) => {
+    if (!expiry.expiry_date) return alert("No valid date extracted for ICS generation.");
+    const dateStr = expiry.expiry_date.replace(/-/g, '');
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//RealEstateMeta//Lease Expiry Calendar//EN
+BEGIN:VEVENT
+DTSTART:${dateStr}T090000Z
+DTEND:${dateStr}T100000Z
+SUMMARY:Lease Expiry / Renewal Notice: ${expiry.document}
+DESCRIPTION:${expiry.action_required}.\\n\\nClause: ${expiry.clause}
+END:VEVENT
+END:VCALENDAR`;
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `lease-expiry-${expiry.document}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const executeTimelineGeneration = async () => {
     const activeDocIds = library.map(d => d.id);
     if (activeDocIds.length === 0) return alert("Please upload documents to generate a timeline.");
@@ -573,7 +681,7 @@ function InnerApp() {
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden relative">
       
       {/* Sidebar / File View */}
-      <div className="w-1/3 min-w-[320px] max-w-[400px] glass-panel border-r border-slate-200 flex flex-col z-10 relative">
+      <div className="w-1/3 min-w-[320px] max-w-[400px] glass-panel border-r border-slate-200 flex flex-col z-10 relative print:hidden">
         <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-white">
           <div className="flex items-center gap-3">
              <img src="/rem-logo.png" alt="REM-Leases" className="h-7 cursor-pointer" onClick={() => navigate('/')} />
@@ -592,18 +700,37 @@ function InnerApp() {
         </div>
         
         <div className="p-4 flex-grow flex flex-col min-h-0 overflow-y-auto bg-slate-50">
-          <div className="mb-4 shrink-0">
+          
+              <button 
+                  onClick={() => setActiveView('portfolio')}
+                  className={`w-full text-left flex items-center gap-2 px-3 py-2.5 rounded-lg font-bold text-sm transition-colors mb-6 ${activeView === 'portfolio' ? 'bg-brand-blue text-white shadow-md' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300'}`}
+              >
+                  <Building2 size={16} /> Global Portfolio Dashboard
+              </button>
+<div className="mb-4 shrink-0">
+              
               <div className="flex items-center justify-between mb-3 px-2 text-xs font-bold text-brand-blue uppercase tracking-widest">
-                  <span>Property Portfolios</span>
+                  <span>Property Portfolios ({cases.length} Leases)</span>
                   <button onClick={createNewCase} className="hover:text-brand-blue p-1 rounded-lg transition-colors text-slate-500 font-bold" title="New Property Portfolio">+</button>
               </div>
+              <div className="px-2 mb-3">
+                  <input 
+                      type="text" 
+                      value={sidebarSearch}
+                      onChange={e => setSidebarSearch(e.target.value)}
+                      placeholder="Search Leases..." 
+                      className="w-full bg-white border border-slate-200 text-xs py-2 px-3 rounded-md outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue placeholder-slate-400"
+                  />
+              </div>
+
               <div className="space-y-1">
                   {cases.length === 0 && <p className="text-xs text-slate-500 italic px-2">No firm workspaces yet.</p>}
-                  {cases.map(c => (
+                  {cases.filter(c => c.name.toLowerCase().includes(sidebarSearch.toLowerCase())).map(c => (
                       <div 
                           key={c.id} 
                           onClick={() => {
                               if (editingCaseId !== c.id) setActiveCaseId(c.id);
+                              setActiveView('workspace');
                           }}
                           className={`group flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${activeCaseId === c.id ? 'bg-white border border-slate-300 shadow-sm text-brand-blue' : 'hover:bg-slate-100 text-slate-600 border border-transparent'}`}
                       >
@@ -780,7 +907,118 @@ function InnerApp() {
         </div>
       </div>
       
+      
+      {/* Portfolio Overview */}
+      {activeView === 'portfolio' && (
+        <div className="flex-1 overflow-y-auto bg-slate-50 p-8 z-10 flex flex-col h-full relative print:p-0 print:overflow-visible">
+            <div className="max-w-6xl mx-auto w-full print:max-w-full">
+               <div className="flex justify-between items-center mb-8">
+                  <div>
+                      <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2"><Building2 className="text-brand-blue" /> Global Portfolio Dashboard</h1>
+                      <p className="text-slate-500 mt-1">Unified view of all leases and franchise agreements across the firm.</p>
+                  </div>
+                  <div className="flex items-center gap-3 print:hidden">
+                      <button 
+                         onClick={() => window.print()}
+                         className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:shadow transition-all"
+                      >
+                         <Printer size={16} className="text-slate-500" /> Export PDF
+                      </button>
+                      <button 
+                         onClick={() => fetchPortfolioOverview(true)}
+                         disabled={isFetchingPortfolio}
+                         className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:shadow disabled:opacity-50 transition-all"
+                      >
+                         {isFetchingPortfolio ? <><Loader2 size={16} className="animate-spin text-brand-blue" /> Syncing...</> : <><Database size={16} className="text-brand-blue" /> Refresh Portfolio Data</>}
+                      </button>
+                  </div>
+               </div>
+
+               {isFetchingPortfolio && !portfolioData ? (
+                  <div className="flex flex-col items-center justify-center p-20 text-slate-400">
+                      <div className="relative w-16 h-16 mb-6">
+                          <Loader2 size={64} className="animate-spin text-brand-blue absolute inset-0 opacity-20" />
+                          <Loader2 size={64} className="animate-spin text-brand-blue absolute inset-0 [animation-duration:2s]" style={{ animationDirection: "reverse" }} />
+                      </div>
+                      <p className="text-lg font-bold text-slate-700">Analyzing all firm folders...</p>
+                      <p className="text-sm mt-2 text-slate-500 max-w-sm text-center">Llama 3 is reading through all agreements across your platform to map expiry dates and critical terms collectively.</p>
+                  </div>
+               ) : portfolioData && portfolioData.length > 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                     <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse min-w-[800px]">
+                           <thead>
+                              <tr className="bg-slate-100 border-b border-slate-200 uppercase text-[10px] font-black text-slate-500 tracking-wider">
+                                  <th className="p-4">Document</th>
+                                  <th className="p-4">Key Dates</th>
+                                  <th className="p-4 min-w-[250px]">Primary Terms Overview</th>
+                                  <th className="p-4 min-w-[200px]">Management Flags</th>
+                              </tr>
+                           </thead>
+                           <tbody className="divide-y divide-slate-100">
+                              {portfolioData.map((doc, idx) => (
+                                 <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
+                                     <td className="p-4 align-top w-64 max-w-[250px] break-words">
+                                         <button 
+                                             onClick={() => {
+                                                 if (doc.workspace_id) {
+                                                     setActiveCaseId(doc.workspace_id);
+                                                     setActiveView('workspace');
+                                                     setSelectedDocId(doc.doc_id);
+                                                 }
+                                             }}
+                                             className="font-bold text-sm text-brand-blue hover:text-brand-blue-dark hover:underline leading-tight text-left flex items-start gap-1 group w-full"
+                                             title="View Source Document"
+                                         >
+                                            <span className="line-clamp-2">{doc.filename}</span>
+                                            <ExternalLink size={12} className="shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                         </button>
+                                         <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${doc.doc_type?.toLowerCase().includes('franchise') ? 'bg-brand-blue/10 text-brand-blue' : 'bg-slate-100 text-slate-600'}`}>
+                                            {doc.doc_type || 'Unknown'}
+                                         </span>
+                                     </td>
+                                     <td className="p-4 align-top space-y-3 whitespace-nowrap">
+                                         <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
+                                            <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Expiry Date</span>
+                                            <span className="font-bold text-sm text-slate-800">{doc.expiry_date || "N/A"}</span>
+                                         </div>
+                                         <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
+                                            <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Renewal Deadline</span>
+                                            <span className="font-semibold text-xs text-brand-accent">{doc.renewal_deadline || "N/A"}</span>
+                                         </div>
+                                     </td>
+                                     <td className="p-4 align-top">
+                                         <p className="text-sm text-slate-700 leading-relaxed font-medium line-clamp-4 hover:line-clamp-none transition-all">{doc.key_terms}</p>
+                                     </td>
+                                     <td className="p-4 align-top">
+                                         {doc.flags && doc.flags.toLowerCase() !== 'none' && doc.flags.toLowerCase() !== 'not applicable' && doc.flags.toLowerCase() !== 'n/a' ? (
+                                            <div className="bg-amber-50/50 border border-amber-200 p-3 rounded-xl flex gap-2">
+                                                <ShieldAlert size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                                                <p className="text-xs font-semibold text-amber-900/80 leading-relaxed">{doc.flags}</p>
+                                            </div>
+                                         ) : (
+                                            <p className="text-xs text-slate-400 font-medium italic bg-slate-50 border border-slate-100 p-2 rounded-lg text-center">No flags detected</p>
+                                         )}
+                                     </td>
+                                 </tr>
+                              ))}
+                           </tbody>
+                        </table>
+                     </div>
+                  </div>
+               ) : (
+                  <div className="text-center p-12 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                      <p className="text-slate-500 font-bold mb-4">No documents found across your portfolios.</p>
+                      <button onClick={() => setActiveView('workspace')} className="text-brand-blue font-bold text-sm hover:underline">Go back to Workspace</button>
+                  </div>
+               )}
+            </div>
+        </div>
+      )}
+
       {/* Chat Interface */}
+      {activeView === 'workspace' && (
+
       <div className="flex-1 flex flex-col relative h-full bg-white z-10">
         <div className="absolute top-0 left-0 w-full h-8 flex z-10 pointer-events-none shrink-0 bg-gradient-to-b from-white to-transparent"></div>
         
@@ -892,20 +1130,40 @@ function InnerApp() {
             <div className="flex justify-between items-center mt-3 px-1">
               <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">REM-Leases AI can hallucinate. Verify claims against primary sources.</p>
               
-              <button 
-                type="button"
-                onClick={executeTimelineGeneration}
-                disabled={!activeCase || library.length === 0 || isGeneratingTimeline}
-                className="flex items-center gap-1.5 text-xs font-bold text-white bg-brand-accent hover:bg-brand-accent-dark px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed"
-              >
-                {isGeneratingTimeline ? <><Loader2 size={12} className="animate-spin" /> Extracting...</> : <><Clock size={12} /> Generate Master Timeline</>}
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={executeExpiryExtraction}
+                  disabled={!activeCase || library.length === 0 || isExtractingExpiries || isRunningGapAnalysis}
+                  className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                >
+                  {isExtractingExpiries ? <><Loader2 size={12} className="animate-spin" /> Scanning...</> : <><Calendar size={12} /> Scan Expiries/Renewals</>}
+                </button>
+                <button 
+                  type="button"
+                  onClick={executeGapAnalysis}
+                  disabled={!activeCase || library.length < 2 || isRunningGapAnalysis}
+                  className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-amber-50 border border-amber-300 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed"
+                >
+                  {isRunningGapAnalysis ? <><Loader2 size={12} className="animate-spin text-amber-700" /> Mapping...</> : <><Layers size={12} className="text-amber-700" /> Franchise vs Lease Gap Analysis</>}
+                </button>
+                <button 
+                  type="button"
+                  onClick={executeTimelineGeneration}
+                  disabled={!activeCase || library.length === 0 || isGeneratingTimeline}
+                  className="flex items-center gap-1.5 text-xs font-bold text-white bg-brand-accent hover:bg-brand-accent-dark px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingTimeline ? <><Loader2 size={12} className="animate-spin" /> Extracting...</> : <><Clock size={12} /> Generate Master Timeline</>}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {showLimitModal && (
+            )}
+
+{showLimitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-md w-full shadow-2xl transition-all transform scale-100">
             <div className="flex justify-center mb-6">
@@ -1085,6 +1343,232 @@ function InnerApp() {
                     </div>
                  </div>
                )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Expiry Modal */}
+      {showExpiryModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Calendar className="text-brand-accent" size={18} /> Global Expiry & Renewal Intelligence
+              </h2>
+              <button 
+                onClick={() => {
+                   if(isExtractingExpiries) {
+                      if(!window.confirm("Expiry extraction is still running in the background. Are you sure you want to close?")) return;
+                   }
+                   setShowExpiryModal(false);
+                }} 
+                className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto bg-white p-6 md:p-8">
+              {isExtractingExpiries ? (
+                 <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-400 gap-4">
+                    <Loader2 size={40} className="animate-spin text-brand-accent" />
+                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">Scanning portfolio for critical dates, termination rights and renewals...</p>
+                 </div>
+              ) : expiryData ? (
+                <div className="max-w-4xl mx-auto space-y-6">
+                  {(!expiryData.expiries || expiryData.expiries.length === 0) ? (
+                     <div className="text-center p-12 text-slate-500 text-sm border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50">No expiry dates could be identified in the active documents.</div>
+                  ) : (
+                    expiryData.expiries.map((exp, idx) => (
+                      <div key={idx} className="bg-white border border-slate-200 shadow-md rounded-2xl overflow-hidden hover:border-brand-blue/30 transition-all">
+                        <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                           <div className="flex items-center gap-3 w-full max-w-sm">
+                             <FileText className="text-brand-blue shrink-0" size={18} />
+                             <span className="font-bold text-slate-900 truncate" title={exp.document}>{exp.document}</span>
+                           </div>
+                           <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+                             <button 
+                                onClick={() => generateICS(exp)}
+                                className="flex items-center gap-1.5 bg-brand-blue/10 text-brand-blue hover:bg-brand-blue hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
+                             >
+                                <CalendarPlus size={14} /> Add to Calendar
+                             </button>
+                             <button 
+                                onClick={(e) => {
+                                  const btn = e.currentTarget;
+                                  const prev = btn.innerHTML;
+                                  btn.innerHTML = `<span class="flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle-2 text-green-500"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg> Pushed</span>`;
+                                  setTimeout(() => { btn.innerHTML = prev; }, 2000);
+                                }}
+                                className="flex items-center gap-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-slate-300 shadow-sm"
+                             >
+                                <Database size={14} /> Push to SmartBuilding API
+                             </button>
+                           </div>
+                        </div>
+                        
+                        <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                           <div className="lg:col-span-1 space-y-4">
+                             <div>
+                                <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Expiration Date</span>
+                                <div className="text-xl font-black text-brand-accent flex items-center gap-2">
+                                  <Clock size={18} className="opacity-80"/> {exp.expiry_date || "Not Specified"}
+                                </div>
+                             </div>
+                             <div>
+                                <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Renewal Deadline</span>
+                                <div className="text-md font-bold text-slate-700">
+                                  {exp.renewal_deadline || "Not Specified"}
+                                </div>
+                             </div>
+                           </div>
+                           <div className="lg:col-span-2 space-y-4">
+                              <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-200/60">
+                                <span className="block text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-2 flex items-center gap-1"><BellRing size={12} /> Action Required</span>
+                                <p className="text-slate-800 text-sm font-medium">{exp.action_required || "No specific action flagged."}</p>
+                              </div>
+                              <div>
+                                <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Governing Clause Extraction</span>
+                                <p className="text-slate-600 text-sm italic border-l-2 border-slate-300 pl-3 leading-relaxed">{exp.clause || "Clause text not extracted."}</p>
+                              </div>
+                           </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                 <div className="flex-1 h-full flex flex-col items-center justify-center text-red-500 gap-4">
+                    <ShieldAlert size={40} />
+                    <p className="font-bold text-sm">Failed to extract expiry data.</p>
+                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gap Analysis Modal */}
+      {showGapModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Layers className="text-amber-600" size={18} /> Franchise vs Lease Gap Analysis
+              </h2>
+              <button 
+                onClick={() => {
+                   if(isRunningGapAnalysis) {
+                      if(!window.confirm("Gap analysis is still running in the background. Are you sure you want to close?")) return;
+                   }
+                   setShowGapModal(false);
+                }} 
+                className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
+              {isRunningGapAnalysis ? (
+                 <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-400 gap-4">
+                    <Loader2 size={40} className="animate-spin text-amber-500" />
+                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">Cross-referencing Franchise and Lease obligations...</p>
+                 </div>
+              ) : gapReportData ? (
+                <div className="max-w-5xl mx-auto space-y-8">
+                  {/* Executive Overview */}
+                  <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">Detected Documents</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <div className="p-4 bg-brand-blue/5 border border-brand-blue/20 rounded-xl">
+                          <span className="text-[10px] uppercase font-bold text-brand-blue mb-1 block">Franchise Agreement</span>
+                          <span className="font-semibold text-sm text-slate-800">{gapReportData.detected_franchise || "Not Found"}</span>
+                       </div>
+                       <div className="p-4 bg-slate-100 border border-slate-200 rounded-xl">
+                          <span className="text-[10px] uppercase font-bold text-slate-500 mb-1 block">Lease Agreement</span>
+                          <span className="font-semibold text-sm text-slate-800">{gapReportData.detected_lease || "Not Found"}</span>
+                       </div>
+                    </div>
+                  </div>
+
+                  {/* Key Terms Mapped Side by Side */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Franchise Terms */}
+                    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                       <div className="bg-brand-blue/10 px-5 py-3 border-b border-brand-blue/20">
+                          <h4 className="text-xs font-bold text-brand-blue uppercase">Franchise Baseline</h4>
+                       </div>
+                       <div className="p-5 space-y-4">
+                          <div>
+                             <span className="block text-[10px] font-bold text-slate-400 uppercase">Term</span>
+                             <p className="text-sm font-medium text-slate-800">{gapReportData.franchise_key_terms?.term || "N/A"}</p>
+                          </div>
+                          <div>
+                             <span className="block text-[10px] font-bold text-slate-400 uppercase">Permitted Use</span>
+                             <p className="text-sm font-medium text-slate-800">{gapReportData.franchise_key_terms?.permitted_use || "N/A"}</p>
+                          </div>
+                       </div>
+                    </div>
+                    {/* Lease Terms */}
+                    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                       <div className="bg-slate-100 px-5 py-3 border-b border-slate-200">
+                          <h4 className="text-xs font-bold text-slate-600 uppercase">Lease Execution</h4>
+                       </div>
+                       <div className="p-5 space-y-4">
+                          <div>
+                             <span className="block text-[10px] font-bold text-slate-400 uppercase">Term</span>
+                             <p className="text-sm font-medium text-slate-800">{gapReportData.lease_key_terms?.term || "N/A"}</p>
+                          </div>
+                          <div>
+                             <span className="block text-[10px] font-bold text-slate-400 uppercase">Permitted Use</span>
+                             <p className="text-sm font-medium text-slate-800">{gapReportData.lease_key_terms?.permitted_use || "N/A"}</p>
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+
+                  {/* Gap Conflicts Table */}
+                  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                     <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+                        <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Compliance Mismatches</h3>
+                     </div>
+                     <div className="divide-y divide-slate-100">
+                       {!gapReportData.gaps || gapReportData.gaps.length === 0 ? (
+                          <div className="p-8 text-center text-sm text-slate-500">No notable gaps detected.</div>
+                       ) : (
+                         gapReportData.gaps.map((gap, i) => (
+                           <div key={i} className="p-6 flex flex-col md:flex-row gap-6 hover:bg-slate-50/50 transition-colors">
+                              <div className="w-40 shrink-0">
+                                 <span className={`inline-flex items-center justify-center px-2.5 py-1 text-[10px] font-bold uppercase rounded-md mb-2 ${gap.status === 'MATCH' ? 'bg-green-100 text-green-700' : gap.status === 'WARNING' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                                    {gap.status}
+                                 </span>
+                                 <h5 className="font-bold text-sm text-slate-800 leading-tight">{gap.category}</h5>
+                              </div>
+                              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                 <div className="bg-amber-50/30 p-3 rounded-lg border border-amber-100 group hover:border-amber-300">
+                                    <span className="block text-[10px] font-bold text-amber-800/60 uppercase mb-1">Franchise Demands</span>
+                                    <p className="text-sm text-slate-700 leading-relaxed font-medium">{gap.franchise_requirement}</p>
+                                 </div>
+                                 <div className="bg-slate-50/50 p-3 rounded-lg border border-slate-200 group hover:border-slate-300">
+                                    <span className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Lease Provides</span>
+                                    <p className="text-sm text-slate-700 leading-relaxed font-medium">{gap.lease_provision}</p>
+                                 </div>
+                              </div>
+                           </div>
+                         ))
+                       )}
+                     </div>
+                  </div>
+
+                </div>
+              ) : (
+                 <div className="flex-1 h-full flex flex-col items-center justify-center text-red-500 gap-4">
+                    <ShieldAlert size={40} />
+                    <p className="font-bold text-sm">Failed to extract gap analysis.</p>
+                 </div>
+              )}
             </div>
           </div>
         </div>
@@ -1450,7 +1934,7 @@ function LandingPage() {
             <div onClick={() => navigate('/app')} className="glass-panel rounded-2xl p-10 text-center cursor-pointer hover:border-brand-blue/50 hover:shadow-lg transition-all bg-white">
               <FolderOpen size={48} className="mx-auto mb-4 text-brand-blue" />
               <h3 className="font-bold text-slate-900 text-lg mb-1">Open Property Portfolios</h3>
-              <p className="text-slate-500 text-sm">Continue to your matters →</p>
+              <p className="text-slate-500 text-sm">Continue to your leases →</p>
             </div>
           </motion.div>
         )}
