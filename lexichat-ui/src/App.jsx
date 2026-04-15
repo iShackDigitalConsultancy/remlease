@@ -687,15 +687,21 @@ END:VCALENDAR`;
              <img src="/rem-logo.png" alt="REM-Leases" className="h-7 cursor-pointer" onClick={() => navigate('/')} />
           </div>
           <div className="flex items-center gap-3">
-              {user && (
-                <div className="text-right">
-                    <div className="text-[11px] font-bold text-slate-800">{user.full_name}</div>
-                    {user.role && <div className="text-[9px] text-brand-blue bg-brand-blue/10 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest mt-0.5 inline-block">{user.role}</div>}
-                </div>
+              {user ? (
+                <>
+                  <div className="text-right">
+                      <div className="text-[11px] font-bold text-slate-800">{user.full_name}</div>
+                      {user.role && <div className="text-[9px] text-brand-blue bg-brand-blue/10 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest mt-0.5 inline-block">{user.role}</div>}
+                  </div>
+                  <button onClick={() => { logout(); navigate('/login'); }} title="Sign Out" className="p-1.5 rounded bg-transparent hover:bg-slate-100 hover:text-red-500 text-slate-400 transition-colors">
+                      <LogOut size={16} />
+                  </button>
+                </>
+              ) : (
+                  <button onClick={() => navigate('/login')} className="bg-brand-blue text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-brand-blue-dark transition-all">
+                      Log In To Dashboard
+                  </button>
               )}
-              <button onClick={logout} title="Sign Out" className="p-1.5 rounded bg-transparent hover:bg-slate-100 hover:text-red-500 text-slate-400 transition-colors">
-                  <LogOut size={16} />
-              </button>
           </div>
         </div>
         
