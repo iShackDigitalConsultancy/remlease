@@ -721,6 +721,7 @@ Output ONLY valid JSON matching this exact structure:
   "expiries": [
     {{
       "document": "contract_name.pdf",
+      "commencement_date": "YYYY-MM-DD" (Extract the explicit start or signature date, or null if absolutely missing),
       "expiry_date": "YYYY-MM-DD" (EXTREMELY IMPORTANT: If missing, you MUST CALCULATE it by finding 'Commencement Date' or 'Signature Date' and adding 'Duration'/'Term'. E.g. start=2023-01-01 + duration 5 years = 2028-01-01),
       "renewal_deadline": "YYYY-MM-DD" (Calculate from expiry date minus notice period if applicable),
       "clause": "Text of the clause governing renewal/termination",

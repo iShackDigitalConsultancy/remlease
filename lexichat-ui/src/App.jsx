@@ -1411,6 +1411,12 @@ END:VCALENDAR`;
                         <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
                            <div className="lg:col-span-1 space-y-4">
                              <div>
+                                <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Commencement Date</span>
+                                <div className="text-md font-bold text-slate-700 flex items-center gap-2">
+                                  <Clock size={16} className="opacity-70"/> {exp.commencement_date || "Not Specified"}
+                                </div>
+                             </div>
+                             <div className="pt-2 border-t border-slate-100">
                                 <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Expiration Date</span>
                                 <div className="text-xl font-black text-brand-accent flex items-center gap-2">
                                   <Clock size={18} className="opacity-80"/> {exp.expiry_date || "Not Specified"}
