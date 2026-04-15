@@ -4,3 +4,4 @@ venv/
 database.db
 uploads/
 .env
+rem-leases.db
