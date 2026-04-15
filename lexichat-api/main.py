@@ -285,6 +285,29 @@ def delete_workspace(ws_id: str, current_user: Optional[models.User] = Depends(g
     db.commit()
     return {"message": "Deleted"}
 
+class DocumentRenameRequest(BaseModel):
+    name: str
+
+@app.put("/api/documents/{doc_id}")
+def rename_document(doc_id: str, request: DocumentRenameRequest, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if current_user:
+        doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+            (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
+            models.Workspace.firm_id == current_user.firm_id
+        ).first()
+    else:
+        doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+            (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
+            models.Workspace.session_id == x_session_id
+        ).first()
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    doc.filename = request.name
+    db.commit()
+    return {"message": "Renamed", "name": doc.filename}
+
 @app.delete("/api/documents/{doc_id}")
 def delete_document(doc_id: str, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
     # Find the document record and verify ownership

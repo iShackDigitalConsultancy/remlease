@@ -1,0 +1,426 @@
+INFO:     Will watch for changes in these directories: ['/Users/wdbmacminipro/Desktop/REM-Leases/lexichat-api']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [2900] using StatReload
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 29986.35it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 16491.37it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [2902]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:49626 - "POST /api/chat HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:49628 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49644 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49644 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49649 - "OPTIONS /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49649 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49677 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49677 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51285 - "OPTIONS /api/documents/f58a5035-87a0-4dfb-832c-178c461b23ae HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51285 - "DELETE /api/documents/f58a5035-87a0-4dfb-832c-178c461b23ae HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51287 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51287 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51285 - "DELETE /api/documents/f58a5035-87a0-4dfb-832c-178c461b23ae HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51290 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51290 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51290 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51290 - "GET /api/workspaces HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2902]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 10632.87it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 7280.21it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [13183]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:51322 - "POST /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51324 - "POST /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51336 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51336 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51344 - "OPTIONS /api/workspaces/af9cd3b7-b5d7-4ed0-bb1c-79cec3470c54 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51344 - "PUT /api/workspaces/af9cd3b7-b5d7-4ed0-bb1c-79cec3470c54 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51346 - "OPTIONS /api/upload/af9cd3b7-b5d7-4ed0-bb1c-79cec3470c54 HTTP/1.1" 200 OK
+WARNING: LLAMA_CLOUD_API_KEY is missing. Falling back to native PyMuPDF and Tesseract OCR.
+INFO:     127.0.0.1:51346 - "POST /api/upload/af9cd3b7-b5d7-4ed0-bb1c-79cec3470c54 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51346 - "GET /api/workspaces HTTP/1.1" 200 OK
+WARNING: LLAMA_CLOUD_API_KEY is missing. Falling back to native PyMuPDF and Tesseract OCR.
+INFO:     127.0.0.1:51346 - "POST /api/upload/af9cd3b7-b5d7-4ed0-bb1c-79cec3470c54 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51346 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51348 - "OPTIONS /api/gap-analysis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51348 - "POST /api/gap-analysis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51369 - "OPTIONS /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51369 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51376 - "OPTIONS /api/workspaces/156ff350-2bbb-4146-8150-2ca0a164f85c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51376 - "PUT /api/workspaces/156ff350-2bbb-4146-8150-2ca0a164f85c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51376 - "PUT /api/workspaces/156ff350-2bbb-4146-8150-2ca0a164f85c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51378 - "OPTIONS /api/upload/156ff350-2bbb-4146-8150-2ca0a164f85c HTTP/1.1" 200 OK
+WARNING: LLAMA_CLOUD_API_KEY is missing. Falling back to native PyMuPDF and Tesseract OCR.
+INFO:     127.0.0.1:51378 - "POST /api/upload/156ff350-2bbb-4146-8150-2ca0a164f85c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51378 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51378 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51454 - "OPTIONS /api/upload/156ff350-2bbb-4146-8150-2ca0a164f85c HTTP/1.1" 200 OK
+WARNING: LLAMA_CLOUD_API_KEY is missing. Falling back to native PyMuPDF and Tesseract OCR.
+INFO:     127.0.0.1:51454 - "POST /api/upload/156ff350-2bbb-4146-8150-2ca0a164f85c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51454 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51456 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51460 - "OPTIONS /api/gap-analysis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51460 - "POST /api/gap-analysis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51466 - "POST /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51472 - "OPTIONS /api/workspaces/307932e7-de66-47a8-9b01-1490d6fdf4c1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51472 - "PUT /api/workspaces/307932e7-de66-47a8-9b01-1490d6fdf4c1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51472 - "OPTIONS /api/upload/307932e7-de66-47a8-9b01-1490d6fdf4c1 HTTP/1.1" 200 OK
+WARNING: LLAMA_CLOUD_API_KEY is missing. Falling back to native PyMuPDF and Tesseract OCR.
+INFO:     127.0.0.1:51474 - "POST /api/upload/307932e7-de66-47a8-9b01-1490d6fdf4c1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51474 - "GET /api/workspaces HTTP/1.1" 200 OK
+WARNING: LLAMA_CLOUD_API_KEY is missing. Falling back to native PyMuPDF and Tesseract OCR.
+INFO:     127.0.0.1:51478 - "POST /api/upload/307932e7-de66-47a8-9b01-1490d6fdf4c1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51478 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51492 - "POST /api/gap-analysis HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [13183]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 19386.70it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 19973.78it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [14725]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:51578 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51578 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51578 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51852 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51854 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51852 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51852 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51852 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51852 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51958 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51960 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51958 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51958 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51958 - "OPTIONS /api/portfolio-overview HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51960 - "GET /api/portfolio-overview HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51973 - "GET /api/portfolio-overview HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14725]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 20109.54it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 17805.53it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [17325]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:51990 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51990 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52010 - "GET /api/portfolio-overview HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52013 - "OPTIONS /api/gap-analysis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52013 - "POST /api/gap-analysis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52015 - "POST /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52015 - "OPTIONS /api/workspaces/8af5565f-3814-4da6-9b11-f9130dc60229 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52015 - "DELETE /api/workspaces/8af5565f-3814-4da6-9b11-f9130dc60229 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52045 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52045 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52045 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52059 - "OPTIONS /api/portfolio-overview HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52059 - "GET /api/portfolio-overview HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52535 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52571 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52571 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52571 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52573 - "OPTIONS /api/workspaces/69deb94f-87e1-4a1e-b342-5e7edf387c02 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52573 - "DELETE /api/workspaces/69deb94f-87e1-4a1e-b342-5e7edf387c02 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52576 - "OPTIONS /api/workspaces/49ad1bea-b719-4dd1-a799-dd1781886a51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52576 - "DELETE /api/workspaces/49ad1bea-b719-4dd1-a799-dd1781886a51 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52590 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52590 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52590 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52590 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52590 - "POST /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52595 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52595 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52605 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52605 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52605 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52605 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52613 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52613 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52868 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52868 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52870 - "OPTIONS /api/portfolio-overview HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52870 - "GET /api/portfolio-overview HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52943 - "OPTIONS /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52943 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52945 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52949 - "OPTIONS /api/gap-analysis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52949 - "POST /api/gap-analysis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52951 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52956 - "OPTIONS /api/documents/c10bd8a0-6ebf-4e50-83a5-13f5f45b9a44/brief HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52956 - "GET /api/documents/c10bd8a0-6ebf-4e50-83a5-13f5f45b9a44/brief HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52956 - "GET /api/document/c10bd8a0-6ebf-4e50-83a5-13f5f45b9a44 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52958 - "OPTIONS /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52958 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52960 - "OPTIONS /api/documents/8762e3a7-fb9a-4a4d-a19f-38a716c7e897/brief HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52960 - "GET /api/documents/8762e3a7-fb9a-4a4d-a19f-38a716c7e897/brief HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52960 - "GET /api/document/8762e3a7-fb9a-4a4d-a19f-38a716c7e897 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52964 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55873 - "OPTIONS /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55873 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55875 - "OPTIONS /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55875 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55878 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55883 - "POST /api/chat HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [17325]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 10417.74it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 9013.73it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [32081]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:55968 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55970 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55968 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55968 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55968 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55979 - "OPTIONS /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55979 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [32081]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 15991.02it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 13883.17it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [32238]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:56020 - "POST /api/extract-expiries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56027 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56027 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56330 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56332 - "POST /api/workspaces HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [32238]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 20989.86it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 12913.50it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [33145]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:56490 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56490 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56490 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56575 - "OPTIONS /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56575 - "GET /api/workspaces HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56575 - "GET /api/workspaces HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'migrate_pg_data.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33145]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 15691.89it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 13299.97it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [33579]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'migrate_pg_data.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33579]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 22612.58it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 12439.68it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [33616]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'migrate_pg_data.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33616]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 21255.27it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 18919.23it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [33665]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33665]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 24424.09it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 17358.48it/s]
+[1mBertForSequenceClassification LOAD REPORT[0m from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  | 
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.[0m
+INFO:     Started server process [33930]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.

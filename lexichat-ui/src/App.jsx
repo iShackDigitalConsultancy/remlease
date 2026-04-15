@@ -60,6 +60,8 @@ function InnerApp() {
   const [isFirmSearchActive, setIsFirmSearchActive] = useState(false);
   const [editingCaseId, setEditingCaseId] = useState(null);
   const [editingCaseName, setEditingCaseName] = useState("");
+  const [editingDocId, setEditingDocId] = useState(null);
+  const [editingDocName, setEditingDocName] = useState("");
   const [sidebarSearch, setSidebarSearch] = useState('');
   // Audit Feature State
   const [showAuditModal, setShowAuditModal] = useState(false);
@@ -303,6 +305,30 @@ function InnerApp() {
       } catch (e) {
           console.error("Failed to rename workspace", e);
           alert("Failed to rename workspace.");
+      }
+  };
+
+  const renameDocument = async (docId, newName) => {
+      if (!newName.trim()) {
+          setEditingDocId(null);
+          return;
+      }
+      try {
+          const headers = token ? { Authorization: `Bearer ${token}` } : { 'X-Session-Id': sessionId };
+          await axios.put(`${API_BASE}/documents/${docId}`, { name: newName }, { headers });
+          setCases(prev => prev.map(c => {
+              if (c.id === activeCaseId) {
+                  return {
+                      ...c,
+                      documents: c.documents.map(d => d.id === docId ? { ...d, name: newName } : d)
+                  };
+              }
+              return c;
+          }));
+          setEditingDocId(null);
+      } catch (e) {
+          console.error("Failed to rename document", e);
+          alert("Failed to rename document.");
       }
   };
 
@@ -788,9 +814,32 @@ END:VCALENDAR`;
                   <div key={doc.id} className="glass-card p-3.5 flex items-center justify-between group">
                     <div className="flex items-center gap-3 overflow-hidden cursor-pointer flex-1" onClick={() => { setSelectedDocId(doc.id); setSelectedPage(1); }}>
                       <FileText size={16} className={`flex-shrink-0 transition-transform duration-300 ${selectedDocId === doc.id ? 'text-brand-accent scale-110' : 'text-slate-400 group-hover:text-brand-blue'}`} />
-                      <span className={`text-[13px] font-semibold truncate transition-colors ${selectedDocId === doc.id ? 'text-slate-900' : 'text-slate-600 group-hover:text-slate-900'}`} title={doc.name}>{doc.name}</span>
+                      {editingDocId === doc.id ? (
+                          <input
+                              type="text"
+                              value={editingDocName}
+                              onChange={(e) => setEditingDocName(e.target.value)}
+                              onBlur={() => renameDocument(doc.id, editingDocName)}
+                              onKeyDown={(e) => {
+                                  if (e.key === 'Enter') renameDocument(doc.id, editingDocName);
+                                  if (e.key === 'Escape') setEditingDocId(null);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[13px] font-semibold text-slate-900 bg-white border border-brand-blue rounded px-1.5 py-0.5 w-full focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+                              autoFocus
+                          />
+                      ) : (
+                          <span className={`text-[13px] font-semibold truncate transition-colors ${selectedDocId === doc.id ? 'text-slate-900' : 'text-slate-600 group-hover:text-slate-900'}`} title={doc.name}>{doc.name}</span>
+                      )}
                     </div>
                     <div className="flex items-center">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setEditingDocId(doc.id); setEditingDocName(doc.name); }}
+                        className="ml-0.5 shrink-0 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-blue transition-all rounded p-0.5"
+                        title="Rename Document"
+                      >
+                        <Edit2 size={12} />
+                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); executeComparison(doc.id); }}
                         className="ml-0.5 shrink-0 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-blue transition-all rounded p-0.5"
