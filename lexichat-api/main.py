@@ -872,8 +872,8 @@ Output exactly this JSON structure as an array of objects:
   {{
     "filename": "Exact Name of the Document",
     "doc_type": "Lease" OR "Franchise Agreement" OR "Unknown",
-    "expiry_date": "YYYY-MM-DD" (extract as strictly standard ISO date, or null if absolutely not specified),
-    "renewal_deadline": "YYYY-MM-DD" (or null if not found. Prioritize specific deadlines),
+    "expiry_date": "YYYY-MM-DD" (EXTREMELY IMPORTANT: If the expiry date is not explicitly stated, you MUST CALCULATE it by finding the 'Commencement Date' or 'Signature Date' and adding the 'Duration' or 'Term'. For example, if commencement is 1 July 2023 and duration is 5 years, calculate and output 2028-06-30.),
+    "renewal_deadline": "YYYY-MM-DD" (Calculate based on the expiry date if it requires N months notice, or null if not found.),
     "key_terms": "1-sentence summary of the most important term or permitted use",
     "flags": "Any major risks, unusual clauses or Management Alerts"
   }}
