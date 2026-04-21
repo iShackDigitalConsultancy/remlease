@@ -161,8 +161,9 @@ async def run_feature_gated_pipeline(full_text: str, map_instruction: str, reduc
         async for chunk in run_map_reduce_stream(full_text, map_instruction, reduce_instruction):
             yield chunk
     else:
-        print("[FEATURE FLAG] Executing Legacy Truncation Logic")
-        yield f"data: {json.dumps({'status': 'processing', 'message': 'Analysing document (Legacy Mode)...'})}\n\n"
+        print(f"[FEATURE FLAG] Executing Legacy Truncation Logic. Env is: {os.environ.get('USE_MAP_REDUCE')}")
+        val = os.environ.get("USE_MAP_REDUCE", "missing")
+        yield f"data: {json.dumps({'status': 'processing', 'message': f'Analysing document (Legacy Mode). ENV is {val}'})}\n\n"
         try:
             # Execute the legacy sync/async logic
             if asyncio.iscoroutinefunction(legacy_func):
