@@ -67,6 +67,7 @@ function InnerApp() {
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [auditDocId, setAuditDocId] = useState(null);
   const [auditPolicy, setAuditPolicy] = useState("1. The lease must stipulate a clear expiration date.\n2. The security deposit amount must be clearly stated.\n3. Tenant maintenance obligations must be defined.");
+  const [pipelineProgress, setPipelineProgress] = useState("");
   const [auditResult, setAuditResult] = useState(null);
   const [isAuditing, setIsAuditing] = useState(false);
   
@@ -83,21 +84,47 @@ function InnerApp() {
   const fetchPortfolioOverview = useCallback(async (forceRefresh = false) => {
     if (!forceRefresh && portfolioData) return;
     setIsFetchingPortfolio(true);
+    setPipelineProgress("");
     try {
-      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
-      const res = await axios.get(`${API_BASE}/portfolio-overview`, { headers });
-      const sorted = res.data.data.sort((a,b) => {
-          if (!a.expiry_date && !b.expiry_date) return 0;
-          if (!a.expiry_date) return 1;
-          if (!b.expiry_date) return -1;
-          return new Date(a.expiry_date) - new Date(b.expiry_date);
-      });
-      setPortfolioData(sorted);
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      else headers['x-session-id'] = sessionId;
+      
+      const res = await fetch(`${API_BASE}/portfolio-overview`, { headers });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+             try {
+               const data = JSON.parse(line.slice(6));
+               if (data.status === 'processing') {
+                   setPipelineProgress(data.message);
+               } else if (data.status === 'complete') {
+                   const sorted = data.data.sort((a,b) => {
+                       if (!a.expiry_date && !b.expiry_date) return 0;
+                       if (!a.expiry_date) return 1;
+                       if (!b.expiry_date) return -1;
+                       return new Date(a.expiry_date) - new Date(b.expiry_date);
+                   });
+                   setPortfolioData(sorted);
+               } else if (data.status === 'error') {
+                   throw new Error(data.message);
+               }
+             } catch(e) {}
+          }
+        }
+      }
     } catch(err) {
       console.error(err);
       alert("Failed to run portfolio overview.");
     } finally {
       setIsFetchingPortfolio(false);
+      setPipelineProgress("");
     }
   }, [portfolioData, token, sessionId]);
 
@@ -477,21 +504,48 @@ function InnerApp() {
     if (!auditPolicy.trim()) return alert("Please enter a policy to check against.");
     setIsAuditing(true);
     setAuditResult(null);
+    setPipelineProgress("");
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       else if (sessionId) headers['X-Session-Id'] = sessionId;
       
-      const res = await axios.post(`${API_BASE}/audit`, {
-        doc_id: auditDocId,
-        policy: auditPolicy
-      }, { headers });
-      setAuditResult(res.data.audit);
+      const res = await fetch(`${API_BASE}/audit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          doc_id: auditDocId,
+          policy: auditPolicy
+        })
+      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+             try {
+               const data = JSON.parse(line.slice(6));
+               if (data.status === 'processing') {
+                   setPipelineProgress(data.message);
+               } else if (data.status === 'complete') {
+                   setAuditResult(data.data?.audit || data.data);
+               } else if (data.status === 'error') {
+                   throw new Error(data.message);
+               }
+             } catch(e) {}
+          }
+        }
+      }
     } catch (err) {
       console.error(err);
       alert("Failed to run document audit. The document might be too long or an error occurred.");
     } finally {
       setIsAuditing(false);
+      setPipelineProgress("");
     }
   };
 
@@ -502,15 +556,44 @@ function InnerApp() {
     setIsRunningGapAnalysis(true);
     setShowGapModal(true);
     setGapReportData(null);
+    setPipelineProgress("");
     try {
-      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
-      const res = await axios.post(`${API_BASE}/gap-analysis`, { doc_ids: activeDocIds }, { headers });
-      setGapReportData(res.data.data);
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      else headers['x-session-id'] = sessionId;
+      const res = await fetch(`${API_BASE}/gap-analysis`, { 
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ doc_ids: activeDocIds })
+      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+             try {
+               const data = JSON.parse(line.slice(6));
+               if (data.status === 'processing') {
+                   setPipelineProgress(data.message);
+               } else if (data.status === 'complete') {
+                   setGapReportData(data.data);
+               } else if (data.status === 'error') {
+                   throw new Error(data.message);
+               }
+             } catch(e) {}
+          }
+        }
+      }
     } catch (err) {
       alert("Failed to run gap analysis.");
       setShowGapModal(false);
     } finally {
       setIsRunningGapAnalysis(false);
+      setPipelineProgress("");
     }
   };
 
@@ -521,15 +604,44 @@ function InnerApp() {
     setIsExtractingExpiries(true);
     setShowExpiryModal(true);
     setExpiryData(null);
+    setPipelineProgress("");
     try {
-      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
-      const res = await axios.post(`${API_BASE}/extract-expiries`, { doc_ids: activeDocIds }, { headers });
-      setExpiryData(res.data.data);
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      else headers['x-session-id'] = sessionId;
+      const res = await fetch(`${API_BASE}/extract-expiries`, { 
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ doc_ids: activeDocIds })
+      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+             try {
+               const data = JSON.parse(line.slice(6));
+               if (data.status === 'processing') {
+                   setPipelineProgress(data.message);
+               } else if (data.status === 'complete') {
+                   setExpiryData(data.data);
+               } else if (data.status === 'error') {
+                   throw new Error(data.message);
+               }
+             } catch(e) {}
+          }
+        }
+      }
     } catch (err) {
       alert("Failed to extract expiry dates.");
       setShowExpiryModal(false);
     } finally {
       setIsExtractingExpiries(false);
+      setPipelineProgress("");
     }
   };
 
@@ -563,21 +675,46 @@ END:VCALENDAR`;
     setIsGeneratingTimeline(true);
     setShowTimelineModal(true);
     setTimelineData(null);
+    setPipelineProgress("");
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       else if (sessionId) headers['X-Session-Id'] = sessionId;
       
-      const res = await axios.post(`${API_BASE}/extract-timeline`, {
-        doc_ids: activeDocIds
-      }, { headers });
-      setTimelineData(res.data.data);
+      const res = await fetch(`${API_BASE}/extract-timeline`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ doc_ids: activeDocIds })
+      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+             try {
+               const data = JSON.parse(line.slice(6));
+               if (data.status === 'processing') {
+                   setPipelineProgress(data.message);
+               } else if (data.status === 'complete') {
+                   setTimelineData(data.data);
+               } else if (data.status === 'error') {
+                   throw new Error(data.message);
+               }
+             } catch(e) {}
+          }
+        }
+      }
     } catch (err) {
       console.error(err);
-      alert("Failed to extract master timeline. The documents might be too complex or an exact chronological mapping could not be found.");
+      alert("Failed to extract master timeline. The documents might be too complex or an error occurred.");
       setShowTimelineModal(false);
     } finally {
       setIsGeneratingTimeline(false);
+      setPipelineProgress("");
     }
   };
 
@@ -592,23 +729,50 @@ END:VCALENDAR`;
     setShowCompareModal(true);
     setIsComparing(true);
     setCompareResult(null);
+    setPipelineProgress("");
     
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       else if (sessionId) headers['X-Session-Id'] = sessionId;
       
-      const res = await axios.post(`${API_BASE}/compare`, {
-        doc_id_a: selectedDocId,
-        doc_id_b: targetDocId
-      }, { headers });
-      setCompareResult(res.data.data);
+      const res = await fetch(`${API_BASE}/compare`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          doc_id_a: selectedDocId,
+          doc_id_b: targetDocId
+        })
+      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+             try {
+               const data = JSON.parse(line.slice(6));
+               if (data.status === 'processing') {
+                   setPipelineProgress(data.message);
+               } else if (data.status === 'complete') {
+                   setCompareResult(data.data);
+               } else if (data.status === 'error') {
+                   throw new Error(data.message);
+               }
+             } catch(e) {}
+          }
+        }
+      }
     } catch (err) {
       console.error(err);
-      alert("Failed to compare documents. The documents might exceed character limits or encounter parsing issues.");
+      alert("Failed to compare documents: " + err.message);
       setShowCompareModal(false);
     } finally {
       setIsComparing(false);
+      setPipelineProgress("");
     }
   };
 
@@ -1269,7 +1433,7 @@ END:VCALENDAR`;
               {isComparing ? (
                  <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-brand-accent" />
-                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">Forensically comparing documents line-by-line...</p>
+                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">{pipelineProgress || "Forensically comparing documents line-by-line..."}</p>
                  </div>
               ) : compareResult ? (
                 <div className="max-w-4xl mx-auto w-full space-y-8">
@@ -1371,7 +1535,7 @@ END:VCALENDAR`;
                     disabled={isAuditing || !auditPolicy.trim()}
                     className="bg-brand-accent text-white hover:bg-brand-accent-dark px-5 py-2.5 rounded-xl font-bold text-sm shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 flex items-center gap-2"
                   >
-                    {isAuditing ? <><Loader2 size={16} className="animate-spin" /> Running Audit...</> : "Run Policy Audit"}
+                    {isAuditing ? <><Loader2 size={16} className="animate-spin" /> {pipelineProgress || "Running Audit..."}</> : "Run Policy Audit"}
                   </button>
                </div>
 
@@ -1428,7 +1592,7 @@ END:VCALENDAR`;
               {isExtractingExpiries ? (
                  <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-brand-accent" />
-                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">Scanning portfolio for critical dates, termination rights and renewals...</p>
+                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">{pipelineProgress || "Scanning portfolio for critical dates, termination rights and renewals..."}</p>
                  </div>
               ) : expiryData ? (
                 <div className="max-w-4xl mx-auto space-y-6">
@@ -1535,7 +1699,7 @@ END:VCALENDAR`;
               {isRunningGapAnalysis ? (
                  <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-amber-500" />
-                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">Cross-referencing Franchise and Lease obligations...</p>
+                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">{pipelineProgress || "Cross-referencing Franchise and Lease obligations..."}</p>
                  </div>
               ) : gapReportData ? (
                 <div className="max-w-5xl mx-auto space-y-8">
@@ -1660,7 +1824,7 @@ END:VCALENDAR`;
               {isGeneratingTimeline ? (
                  <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-brand-accent" />
-                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">Synthesizing multiple documents into a chronological history...</p>
+                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">{pipelineProgress || "Synthesizing multiple documents into a chronological history..."}</p>
                  </div>
               ) : timelineData ? (
                 <>
