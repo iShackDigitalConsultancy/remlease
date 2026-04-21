@@ -424,3 +424,10 @@ bert.embeddings.position_ids | UNEXPECTED |  |
 INFO:     Started server process [33930]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33930]
+INFO:     Stopping reloader process [2900]
+/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/resource_tracker.py:396: UserWarning: resource_tracker: There appear to be 11 leaked semaphore objects to clean up at shutdown: {'/loky-33579-fohbw5l7', '/loky-13183-rgpsn78o', '/loky-33145-gp4ewbjd', '/loky-33665-hkk44l5g', '/loky-14725-xi45cwrt', '/loky-33616-04jybc4t', '/loky-33930-tgb6099r', '/loky-2902-hbphoz2x', '/loky-32081-pf_dq5ki', '/loky-32238-xnyn5np7', '/loky-17325-qotv6a9n'}
+  warnings.warn(
