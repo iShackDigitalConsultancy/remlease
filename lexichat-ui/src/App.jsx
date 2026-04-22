@@ -9,7 +9,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 import { 
   FileText, UploadCloud, MessageSquare, Send, CheckCircle2, 
-  Loader2, Scale, BookOpen, Clock, ChevronRight, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare, Calendar, CalendarPlus, Database, BellRing, Layers, ExternalLink, Printer
+  Loader2, Scale, BookOpen, Clock, ChevronRight, ChevronDown, ChevronUp, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare, Calendar, CalendarPlus, Database, BellRing, Layers, ExternalLink, Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
@@ -149,6 +149,7 @@ function InnerApp() {
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [compareResult, setCompareResult] = useState(null);
   const [isComparing, setIsComparing] = useState(false);
+  const [isAdvancedSearchExpanded, setIsAdvancedSearchExpanded] = useState(false);
 
   const [cases, setCases] = useState([]);
   const [activeCaseId, setActiveCaseId] = useState(localStorage.getItem('rem-leases_active_case') || null);
@@ -630,14 +631,19 @@ function InnerApp() {
                } else if (data.status === 'complete') {
                    setExpiryData(data.data);
                } else if (data.status === 'error') {
-                   throw new Error(data.message);
+                   alert("Extraction Error: " + data.message);
+                   setShowExpiryModal(false);
+                   setIsExtractingExpiries(false);
+                   return; // Break out of function entirely
                }
-             } catch(e) {}
+             } catch(e) {
+                 // only ignore json parse errors
+             }
           }
         }
       }
     } catch (err) {
-      alert("Failed to extract expiry dates.");
+      alert("Failed to extract expiry dates. Connection issue.");
       setShowExpiryModal(false);
     } finally {
       setIsExtractingExpiries(false);
@@ -1058,61 +1064,75 @@ END:VCALENDAR`;
           )}
 
           <div className="mt-4 mb-2 shrink-0 border-t border-slate-200 pt-4">
-             <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2">
-                 <BookOpen size={12} /> Property Law & Leasing Regulations
-             </h3>
-             <div className="space-y-2 px-2">
-                 <label className="flex items-start gap-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-colors border border-transparent">
-                     <input 
-                         type="checkbox" 
-                         checked={activeJurisdictions.includes('za')}
-                         onChange={(e) => {
-                             if (e.target.checked) setActiveJurisdictions(prev => [...prev, 'za']);
-                             else setActiveJurisdictions(prev => prev.filter(j => j !== 'za'));
-                         }}
-                         className="mt-1 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
-                     />
-                     <div className="flex flex-col">
-                         <div className="flex items-center gap-2">
-                             <span className="font-semibold text-xs text-slate-900">South Africa</span>
-                             <span className="text-[9px] bg-brand-accent/10 px-1.5 py-0.5 rounded text-brand-accent uppercase tracking-wider font-bold">Premium</span>
-                         </div>
-                         <div className="text-[10px] text-slate-500 leading-tight mt-1 space-y-0.5">
-                             <p>✓ Rental Housing Act (50 of 1999)</p>
-                             <p>✓ Consumer Protection Act (CPA)</p>
-                             <p>✓ Prevention of Illegal Eviction Act (PIE)</p>
-                             <p>✓ National Credit Act (34 of 2005)</p>
-                             <p>✓ Property Practitioners Act</p>
-                         </div>
+             <button 
+                onClick={() => setIsAdvancedSearchExpanded(!isAdvancedSearchExpanded)}
+                className="w-full flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2 hover:text-brand-blue transition-colors group"
+             >
+                 <span className="flex items-center gap-2"><Layers size={12} /> Advanced Settings</span>
+                 {isAdvancedSearchExpanded ? <ChevronUp size={14} className="group-hover:text-brand-blue" /> : <ChevronDown size={14} className="group-hover:text-brand-blue" />}
+             </button>
+             
+             {isAdvancedSearchExpanded && (
+               <div className="mt-4 space-y-4">
+                 <div>
+                     <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
+                         <BookOpen size={12} /> Property Law & Leasing Regulations
+                     </h3>
+                     <div className="space-y-2 px-2">
+                         <label className="flex items-start gap-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-colors border border-transparent">
+                             <input 
+                                 type="checkbox" 
+                                 checked={activeJurisdictions.includes('za')}
+                                 onChange={(e) => {
+                                     if (e.target.checked) setActiveJurisdictions(prev => [...prev, 'za']);
+                                     else setActiveJurisdictions(prev => prev.filter(j => j !== 'za'));
+                                 }}
+                                 className="mt-1 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
+                             />
+                             <div className="flex flex-col">
+                                 <div className="flex items-center gap-2">
+                                     <span className="font-semibold text-xs text-slate-900">South Africa</span>
+                                     <span className="text-[9px] bg-brand-accent/10 px-1.5 py-0.5 rounded text-brand-accent uppercase tracking-wider font-bold">Premium</span>
+                                 </div>
+                                 <div className="text-[10px] text-slate-500 leading-tight mt-1 space-y-0.5">
+                                     <p>✓ Rental Housing Act (50 of 1999)</p>
+                                     <p>✓ Consumer Protection Act (CPA)</p>
+                                     <p>✓ Prevention of Illegal Eviction Act (PIE)</p>
+                                     <p>✓ National Credit Act (34 of 2005)</p>
+                                     <p>✓ Property Practitioners Act</p>
+                                 </div>
+                             </div>
+                         </label>
                      </div>
-                 </label>
-             </div>
-          </div>
+                 </div>
 
-          <div className="mt-2 mb-2 shrink-0 border-t border-slate-200 pt-4">
-             <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2">
-                 <Building2 size={12} /> Agency & Portfolio History
-             </h3>
-             <div className="space-y-2 px-2">
-                 <label className="flex items-start gap-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-colors border border-transparent">
-                     <input 
-                         type="checkbox" 
-                         checked={isFirmSearchActive}
-                         onChange={(e) => setIsFirmSearchActive(e.target.checked)}
-                         className="mt-1 rounded border-slate-300 text-brand-accent focus:ring-brand-accent"
-                         disabled={!user?.firm_id}
-                     />
-                     <div className="flex flex-col">
-                         <div className="flex items-center gap-2">
-                             <span className="font-semibold text-xs text-slate-900">Search Portfolio History</span>
-                             <span className="text-[9px] bg-brand-accent/10 px-1.5 py-0.5 rounded text-brand-accent uppercase tracking-wider font-bold">Enterprise</span>
-                         </div>
-                         <div className="text-[10px] text-slate-500 leading-tight mt-1">
-                             <p>Search across all lease agreements and documents uploaded by your agency. Bypasses current workspace limit.</p>
-                         </div>
+                 <div className="border-t border-slate-200 pt-4">
+                     <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
+                         <Building2 size={12} /> Agency & Portfolio History
+                     </h3>
+                     <div className="space-y-2 px-2">
+                         <label className="flex items-start gap-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-colors border border-transparent">
+                             <input 
+                                 type="checkbox" 
+                                 checked={isFirmSearchActive}
+                                 onChange={(e) => setIsFirmSearchActive(e.target.checked)}
+                                 className="mt-1 rounded border-slate-300 text-brand-accent focus:ring-brand-accent"
+                                 disabled={!user?.firm_id}
+                             />
+                             <div className="flex flex-col">
+                                 <div className="flex items-center gap-2">
+                                     <span className="font-semibold text-xs text-slate-900">Search Portfolio History</span>
+                                     <span className="text-[9px] bg-brand-accent/10 px-1.5 py-0.5 rounded text-brand-accent uppercase tracking-wider font-bold">Enterprise</span>
+                                 </div>
+                                 <div className="text-[10px] text-slate-500 leading-tight mt-1">
+                                     <p>Search across all lease agreements and documents uploaded by your agency. Bypasses current workspace limit.</p>
+                                 </div>
+                             </div>
+                         </label>
                      </div>
-                 </label>
-             </div>
+                 </div>
+               </div>
+             )}
           </div>
           
           <div className="mt-8 shrink-0 pb-4">

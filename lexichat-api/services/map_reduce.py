@@ -158,8 +158,11 @@ async def run_feature_gated_pipeline(full_text: str, map_instruction: str, reduc
     
     if use_map_reduce:
         print("[FEATURE FLAG] Executing Map-Reduce Pipeline")
-        async for chunk in run_map_reduce_stream(full_text, map_instruction, reduce_instruction):
-            yield chunk
+        try:
+            async for chunk in run_map_reduce_stream(full_text, map_instruction, reduce_instruction):
+                yield chunk
+        except Exception as e:
+            yield f"data: {json.dumps({'status': 'error', 'message': f'Pipeline Error: {str(e)}'})}\n\n"
     else:
         yield f"data: {json.dumps({'status': 'processing', 'message': 'Analysing document (Legacy Mode)...'})}\n\n"
         try:
