@@ -1392,6 +1392,11 @@ def migrate_voyage_admin(
     admin_key = os.environ.get("MIGRATION_ADMIN_KEY")
     req_key = request_headers.headers.get("X-Admin-Key")
     
+    print(f"DEBUG_MIGRATE: admin_key_len={len(admin_key) if admin_key else 0}, req_key_len={len(req_key) if req_key else 0}")
+    print(f"DEBUG_MIGRATE: admin_key={repr(admin_key)}")
+    print(f"DEBUG_MIGRATE: req_key={repr(req_key)}")
+    print(f"DEBUG_MIGRATE: All headers: {list(request_headers.headers.keys())}")
+    
     if not admin_key or req_key != admin_key:
         raise HTTPException(status_code=403, detail="Forbidden")
 
