@@ -55,6 +55,9 @@ pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 vo = voyageai.Client(api_key=os.environ.get("VOYAGE_API_KEY"))
 
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/app/uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 index_name = "lekkerpilot"
 if index_name not in pc.list_indexes().names():
     pc.create_index(
@@ -333,7 +336,7 @@ def delete_document(doc_id: str, current_user: Optional[models.User] = Depends(g
         print(f"Pinecone delete warning (non-fatal): {e}")
 
     # Remove the uploaded file from disk
-    file_path = f"./uploads/{doc_id}.pdf"
+    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
     if os.path.exists(file_path):
         os.remove(file_path)
 
@@ -345,7 +348,7 @@ def delete_document(doc_id: str, current_user: Optional[models.User] = Depends(g
 def analyze_document_brief_background(doc_id: str, filename: str, sample_text: str):
     try:
         brief = analyze_document_brief(doc_id, filename, sample_text)
-        with open(f"./uploads/{doc_id}_brief.json", "w") as f:
+        with open(os.path.join(UPLOAD_DIR, f"{doc_id}_brief.json"), "w") as f:
             json.dump(brief, f)
     except Exception as e:
         print(f"Background brief extraction failed: {e}")
@@ -366,7 +369,7 @@ def get_document_brief(doc_id: str, current_user: Optional[models.User] = Depend
     if not doc:
         raise HTTPException(status_code=403, detail="Access denied")
         
-    file_path = f"./uploads/{doc_id}_brief.json"
+    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}_brief.json")
     if not os.path.exists(file_path):
         return {"brief": None}
         
@@ -396,8 +399,8 @@ async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file:
     pdf_bytes = file.file.read()
     
     # Save PDF to disk for viewing in React
-    os.makedirs("./uploads", exist_ok=True)
-    file_path_saved = f"./uploads/{doc_id}.pdf"
+    
+    file_path_saved = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
     with open(file_path_saved, "wb") as f:
         f.write(pdf_bytes)
     
@@ -431,7 +434,7 @@ async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file:
                     for chunk in smart_chunk(text, page_num):
                         chunks_with_meta.append(chunk)
             
-            with open(f"./uploads/{doc_id}.md", "w") as f:
+            with open(os.path.join(UPLOAD_DIR, f"{doc_id}.md"), "w") as f:
                 f.write(full_markdown)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid or corrupted PDF file during fallback extraction. {str(e)}")
@@ -485,7 +488,7 @@ async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file:
                         chunks_with_meta.append(chunk)
                         
             # Cache the pristine LlamaParse markdown so downstream endpoints (Audit, Compare) can load it instantly
-            with open(f"./uploads/{doc_id}.md", "w") as f:
+            with open(os.path.join(UPLOAD_DIR, f"{doc_id}.md"), "w") as f:
                 f.write(full_markdown)
 
         except Exception as e:
@@ -559,7 +562,7 @@ async def document_audit(payload: AuditRequest, current_user: Optional[models.Us
         raise HTTPException(status_code=403, detail="Access denied for document audit")
         
     # 2. Extract Document Text directly from local cached markdown
-    file_path = f"./uploads/{payload.doc_id}.md"
+    file_path = os.path.join(UPLOAD_DIR, f"{payload.doc_id}.md")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Underlying document markdown file not found")
         
@@ -653,7 +656,7 @@ async def extract_timeline(payload: TimelineExtractionRequest, current_user: Opt
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
             
-        file_path = f"./uploads/{doc_id}.md"
+        file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
         if os.path.exists(file_path):
             try:
                 with open(file_path, "r") as f:
@@ -751,7 +754,7 @@ async def extract_expiries(payload: ExpiryExtractionRequest, current_user: Optio
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
             
-        file_path = f"./uploads/{doc_id}.md"
+        file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
         if os.path.exists(file_path):
             try:
                 with open(file_path, "r") as f:
@@ -841,7 +844,7 @@ async def gap_analysis(payload: GapAnalysisRequest, current_user: Optional[model
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
             
-        file_path = f"./uploads/{doc_id}.md"
+        file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
         if os.path.exists(file_path):
             try:
                 with open(file_path, "r") as f:
@@ -931,9 +934,9 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
     full_text = ""
     # Process up to 10 documents, taking 6000 characters each to avoid heavy context limits.
     for doc in docs[:10]:
-        file_path = f"./uploads/{doc.pinecone_doc_id}.md"
+        file_path = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.md")
         if not os.path.exists(file_path):
-            file_path = f"./uploads/{doc.id}.md"
+            file_path = os.path.join(UPLOAD_DIR, f"{doc.id}.md")
             
         if os.path.exists(file_path):
             try:
@@ -990,9 +993,9 @@ Ensure the JSON is perfectly valid and is just the array. Ensure you include EVE
             # Legacy logic
             legacy_text = ""
             for doc in docs[:10]:
-                fp = f"./uploads/{doc.pinecone_doc_id}.md"
+                fp = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.md")
                 if not os.path.exists(fp):
-                    fp = f"./uploads/{doc.id}.md"
+                    fp = os.path.join(UPLOAD_DIR, f"{doc.id}.md")
                 if os.path.exists(fp):
                     with open(fp, "r") as f:
                         t = f.read()
@@ -1068,7 +1071,7 @@ async def document_compare(payload: CompareRequest, current_user: Optional[model
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
             
-        file_path = f"./uploads/{doc_id}.md"
+        file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail=f"Source markdown for {doc.filename} not found.")
             
@@ -1264,7 +1267,7 @@ async def chat_with_pdf(request: ChatRequest, current_user: Optional[models.User
             page_one_anchors = []
             for doc_id in request.doc_ids:
                 try:
-                    md_path = f"./uploads/{doc_id}.md"
+                    md_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
                     if os.path.exists(md_path):
                         with open(md_path, "r") as f:
                             p1_text = f.read(1500) # Load the absolutely critical opening definitions
@@ -1334,7 +1337,7 @@ async def chat_with_pdf(request: ChatRequest, current_user: Optional[models.User
 
 @app.get("/api/document/{doc_id}")
 async def get_document(doc_id: str):
-    file_path = f"./uploads/{doc_id}.pdf"
+    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
     if os.path.exists(file_path):
         return FileResponse(file_path, media_type="application/pdf")
     raise HTTPException(status_code=404, detail="Document not found, it may have been deleted.")
@@ -1405,7 +1408,7 @@ def migrate_voyage_admin(
     missing = []
     
     for doc in docs:
-        path = f"/app/uploads/{doc.id}.md"
+        path = os.path.join(UPLOAD_DIR, f"{doc.id}.md")
         if os.path.exists(path) and os.path.getsize(path) > 0:
             readable += 1
         else:
@@ -1456,7 +1459,7 @@ def migrate_voyage_admin(
         failed_documents = []
         
         for doc in docs:
-            path = f"/app/uploads/{doc.id}.md"
+            path = os.path.join(UPLOAD_DIR, f"{doc.id}.md")
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     text_content = f.read()
@@ -1517,6 +1520,50 @@ def migrate_voyage_admin(
         
     return StreamingResponse(migration_stream(), media_type="application/x-ndjson")
 
+class ResetPineconeRequest(BaseModel):
+    pass
+
+@app.post("/api/admin/reset-pinecone")
+def reset_pinecone_admin(
+    request_headers: Request
+):
+    admin_key = os.environ.get("MIGRATION_ADMIN_KEY")
+    req_key = request_headers.headers.get("x-admin-key")
+    
+    if admin_key:
+        admin_key = admin_key.strip()
+    if req_key:
+        req_key = req_key.strip()
+        
+    if not admin_key or req_key != admin_key:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    try:
+        # 1. Delete the existing lekkerpilot index
+        if index_name in pc.list_indexes().names():
+            pc.delete_index(index_name)
+        
+        # 2. Wait 10 seconds
+        time.sleep(10)
+        
+        # 3. Recreate it at 1024 dimensions, cosine metric
+        pc.create_index(
+            name=index_name,
+            dimension=1024,
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
+        )
+        
+        # 4. Wait 30 seconds for readiness
+        time.sleep(30)
+        
+        # 5. Return status
+        return {"status": "complete", "message": "Index reset to 1024d"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
