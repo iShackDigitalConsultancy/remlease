@@ -9,7 +9,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 import { 
   FileText, UploadCloud, MessageSquare, Send, CheckCircle2, 
-  Loader2, Scale, BookOpen, Clock, ChevronRight, ChevronDown, ChevronUp, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare, Calendar, CalendarPlus, Database, BellRing, Layers, ExternalLink, Printer
+  Loader2, Scale, BookOpen, Clock, ChevronRight, ChevronDown, ChevronUp, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare, Calendar, CalendarPlus, Database, BellRing, Layers, ExternalLink, Printer, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
@@ -52,6 +52,49 @@ const ProtectedRoute = ({ children }) => {
 function InnerApp() {
   const { token, user, logout, sessionId } = useAuth();
   const navigate = useNavigate();
+
+  const handleDownloadOriginal = async (docId, filename) => {
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      else headers['x-session-id'] = sessionId;
+      
+      const baseURL = `${API_BASE.replace('/api', '')}/api/document/${docId}`;
+      const res = await fetch(baseURL, { headers });
+      if (!res.ok) throw new Error(`Failed to download: ${res.status}`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || "document.pdf";
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download document.");
+    }
+  };
+
+  const handleExportPDF = async (elementId, reportType) => {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    try {
+      const canvas = await window.html2canvas(el, { scale: 2 });
+      const imgData = canvas.toDataURL("image/jpeg", 0.98);
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+      const width = pdf.internal.pageSize.getWidth();
+      const height = (canvas.height * width) / canvas.width;
+      pdf.addImage(imgData, "JPEG", 0, 0, width, height);
+      const dateStr = new Date().toISOString().split("T")[0];
+      pdf.save(`${reportType}_${dateStr}.pdf`);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to export PDF.");
+    }
+  };
 
   const [isUploading, setIsUploading] = useState(false);
   const [selectedDocId, setSelectedDocId] = useState(null);
@@ -149,6 +192,7 @@ function InnerApp() {
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [compareResult, setCompareResult] = useState(null);
   const [isComparing, setIsComparing] = useState(false);
+  const [compareTargetDocId, setCompareTargetDocId] = useState(null);
   const [isAdvancedSearchExpanded, setIsAdvancedSearchExpanded] = useState(false);
 
   const [cases, setCases] = useState([]);
@@ -501,7 +545,7 @@ function InnerApp() {
     }
   };
 
-  const executeAudit = async () => {
+  const executeAudit = async (forceRefresh = false) => {
     if (!auditPolicy.trim()) return alert("Please enter a policy to check against.");
     setIsAuditing(true);
     setAuditResult(null);
@@ -516,7 +560,8 @@ function InnerApp() {
         headers,
         body: JSON.stringify({
           doc_id: auditDocId,
-          policy: auditPolicy
+          policy: auditPolicy,
+          force_refresh: forceRefresh
         })
       });
       const reader = res.body.getReader();
@@ -550,7 +595,7 @@ function InnerApp() {
     }
   };
 
-  const executeGapAnalysis = async () => {
+  const executeGapAnalysis = async (forceRefresh = false) => {
     const activeDocIds = library.map(d => d.id);
     if (activeDocIds.length < 2) return alert("Please upload at least TWO documents (a Lease and a Franchise Agreement) to run Gap Analysis.");
     
@@ -561,11 +606,14 @@ function InnerApp() {
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      else headers['x-session-id'] = sessionId;
+      else if (sessionId) headers['x-session-id'] = sessionId;
       const res = await fetch(`${API_BASE}/gap-analysis`, { 
         method: 'POST',
         headers,
-        body: JSON.stringify({ doc_ids: activeDocIds })
+        body: JSON.stringify({ 
+          doc_ids: activeDocIds,
+          force_refresh: forceRefresh
+        })
       });
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
@@ -598,7 +646,7 @@ function InnerApp() {
     }
   };
 
-  const executeExpiryExtraction = async () => {
+  const executeExpiryExtraction = async (forceRefresh = false) => {
     const activeDocIds = library.map(d => d.id);
     if (activeDocIds.length === 0) return alert("Please upload documents to scan expiries.");
     
@@ -609,11 +657,14 @@ function InnerApp() {
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      else headers['x-session-id'] = sessionId;
+      else if (sessionId) headers['x-session-id'] = sessionId;
       const res = await fetch(`${API_BASE}/extract-expiries`, { 
         method: 'POST',
         headers,
-        body: JSON.stringify({ doc_ids: activeDocIds })
+        body: JSON.stringify({ 
+          doc_ids: activeDocIds,
+          force_refresh: forceRefresh
+        })
       });
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
@@ -674,7 +725,7 @@ END:VCALENDAR`;
     document.body.removeChild(link);
   };
 
-  const executeTimelineGeneration = async () => {
+  const executeTimelineGeneration = async (forceRefresh = false) => {
     const activeDocIds = library.map(d => d.id);
     if (activeDocIds.length === 0) return alert("Please upload documents to generate a timeline.");
     
@@ -690,7 +741,10 @@ END:VCALENDAR`;
       const res = await fetch(`${API_BASE}/extract-timeline`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ doc_ids: activeDocIds })
+        body: JSON.stringify({ 
+          doc_ids: activeDocIds,
+          force_refresh: forceRefresh 
+        })
       });
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
@@ -724,16 +778,18 @@ END:VCALENDAR`;
     }
   };
 
-  const executeComparison = async (targetDocId) => {
+  const executeComparison = async (targetDocId, forceRefresh = false) => {
     if (!selectedDocId) {
       return alert("Please click on a 'Base / Original' document in your library to open it first, then click the compare icon on a second document.");
     }
-    if (selectedDocId === targetDocId) {
+    const compareTgt = targetDocId || compareTargetDocId;
+    if (selectedDocId === compareTgt) {
       return alert("Please select a different document to compare against.");
     }
     
     setShowCompareModal(true);
     setIsComparing(true);
+    setCompareTargetDocId(compareTgt);
     setCompareResult(null);
     setPipelineProgress("");
     
@@ -747,7 +803,8 @@ END:VCALENDAR`;
         headers,
         body: JSON.stringify({
           doc_id_a: selectedDocId,
-          doc_id_b: targetDocId
+          doc_id_b: compareTgt,
+          force_refresh: forceRefresh
         })
       });
       const reader = res.body.getReader();
@@ -1215,6 +1272,13 @@ END:VCALENDAR`;
                                          <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${doc.doc_type?.toLowerCase().includes('franchise') ? 'bg-brand-blue/10 text-brand-blue' : 'bg-slate-100 text-slate-600'}`}>
                                             {doc.doc_type || 'Unknown'}
                                          </span>
+                                         <button 
+                                            onClick={() => handleDownloadOriginal(doc.doc_id, doc.filename)} 
+                                            className="mt-2 text-[10px] flex w-max items-center gap-1 bg-brand-blue/5 hover:bg-brand-blue/15 text-brand-blue py-1 px-2 rounded transition-colors"
+                                            title="Download Original PDF"
+                                         >
+                                            <Download size={10} /> Download PDF
+                                         </button>
                                      </td>
                                      <td className="p-4 align-top space-y-3 whitespace-nowrap">
                                          <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
@@ -1438,18 +1502,24 @@ END:VCALENDAR`;
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <GitCompare className="text-brand-accent" size={18} /> Document Redline Comparison
               </h2>
-              <button 
-                onClick={() => {
-                   if(isComparing && !window.confirm("Comparison is still running. Are you sure you want to close?")) return;
-                   setShowCompareModal(false);
-                }} 
-                className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                <X size={16} />
-              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => executeComparison(compareTargetDocId, true)} disabled={isComparing} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isComparing ? "Refreshing..." : "Refresh"}</button>
+                <button onClick={() => handleDownloadOriginal(selectedDocId, "Base_Document.pdf")} className="text-xs flex items-center gap-1.5 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-3 rounded-md transition-colors" title="Download Base Document"><Download size={14}/> PDF 1</button>
+                <button onClick={() => handleDownloadOriginal(compareTargetDocId, "Target_Document.pdf")} className="text-xs flex items-center gap-1.5 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-3 rounded-md transition-colors" title="Download Comparison Document"><Download size={14}/> PDF 2</button>
+                <button onClick={() => handleExportPDF("compare-modal-content", "compare")} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
+                <button 
+                  onClick={() => {
+                     if(isComparing && !window.confirm("Comparison is still running. Are you sure you want to close?")) return;
+                     setShowCompareModal(false);
+                  }} 
+                  className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors ml-2"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto flex flex-col bg-white p-6 md:p-8">
+            <div id="compare-modal-content" className="flex-1 overflow-y-auto flex flex-col bg-white p-6 md:p-8">
               {isComparing ? (
                  <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-brand-accent" />
@@ -1532,12 +1602,15 @@ END:VCALENDAR`;
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <ShieldCheck className="text-brand-accent" size={18} /> Document Compliance Audit
               </h2>
-              <button onClick={() => setShowAuditModal(false)} className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors">
-                <X size={16} />
-              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => executeAudit(true)} disabled={isAuditing} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isAuditing ? "Refreshing..." : "Refresh"}</button>
+                <button onClick={() => handleDownloadOriginal(auditDocId, selectedDocId === auditDocId ? cases.find(c => c.id === activeCaseId)?.documents?.find(d => d.id === auditDocId)?.name : "Audit_Document.pdf")} className="text-xs flex items-center gap-1.5 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-3 rounded-md transition-colors"><Download size={14}/> PDF</button>
+                <button onClick={() => handleExportPDF("audit-modal-content", "audit")} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
+                <button onClick={() => setShowAuditModal(false)} className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors ml-2"><X size={16} /></button>
+              </div>
             </div>
             
-            <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-4">
+            <div id="audit-modal-content" className="p-6 overflow-y-auto flex-1 flex flex-col gap-4">
                <div>
                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Audit Policy Checklist</label>
                    <textarea
@@ -1595,20 +1668,24 @@ END:VCALENDAR`;
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Calendar className="text-brand-accent" size={18} /> Global Expiry & Renewal Intelligence
               </h2>
-              <button 
-                onClick={() => {
-                   if(isExtractingExpiries) {
-                      if(!window.confirm("Expiry extraction is still running in the background. Are you sure you want to close?")) return;
-                   }
-                   setShowExpiryModal(false);
-                }} 
-                className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                <X size={16} />
-              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => executeExpiryExtraction(true)} disabled={isExtractingExpiries} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isExtractingExpiries ? "Scanning..." : "Refresh"}</button>
+                <button onClick={() => handleExportPDF("expiry-modal-content", "expiry_intelligence")} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
+                <button 
+                  onClick={() => {
+                     if(isExtractingExpiries) {
+                        if(!window.confirm("Expiry extraction is still running in the background. Are you sure you want to close?")) return;
+                     }
+                     setShowExpiryModal(false);
+                  }} 
+                  className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors ml-2"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto bg-white p-6 md:p-8">
+            <div id="expiry-modal-content" className="flex-1 overflow-y-auto bg-white p-6 md:p-8">
               {isExtractingExpiries ? (
                  <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-brand-accent" />
@@ -1622,9 +1699,20 @@ END:VCALENDAR`;
                     expiryData.expiries.map((exp, idx) => (
                       <div key={idx} className="bg-white border border-slate-200 shadow-md rounded-2xl overflow-hidden hover:border-brand-blue/30 transition-all">
                         <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                           <div className="flex items-center gap-3 w-full max-w-sm">
-                             <FileText className="text-brand-blue shrink-0" size={18} />
-                             <span className="font-bold text-slate-900 truncate" title={exp.document}>{exp.document}</span>
+                           <div className="flex flex-col gap-1 w-full max-w-sm">
+                             <div className="flex items-center gap-3">
+                               <FileText className="text-brand-blue shrink-0" size={18} />
+                               <span className="font-bold text-slate-900 truncate" title={exp.document}>{exp.document}</span>
+                             </div>
+                             <button 
+                               onClick={() => {
+                                 const doc = library.find(d => d.name === exp.document || d.filename === exp.document);
+                                 if(doc) handleDownloadOriginal(doc.id, doc.filename);
+                               }}
+                               className="text-[10px] mt-1 ml-7 flex w-max items-center gap-1 bg-brand-blue/5 hover:bg-brand-blue/15 text-brand-blue py-1 px-2 rounded transition-colors"
+                             >
+                                <Download size={10} /> Download Source PDF
+                             </button>
                            </div>
                            <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
                              <button 
@@ -1702,20 +1790,24 @@ END:VCALENDAR`;
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Layers className="text-amber-600" size={18} /> Franchise vs Lease Gap Analysis
               </h2>
-              <button 
-                onClick={() => {
-                   if(isRunningGapAnalysis) {
-                      if(!window.confirm("Gap analysis is still running in the background. Are you sure you want to close?")) return;
-                   }
-                   setShowGapModal(false);
-                }} 
-                className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                <X size={16} />
-              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => executeGapAnalysis(true)} disabled={isRunningGapAnalysis} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isRunningGapAnalysis ? "Mapping..." : "Refresh"}</button>
+                <button onClick={() => handleExportPDF("gap-modal-content", "gap_analysis")} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
+                <button 
+                  onClick={() => {
+                     if(isRunningGapAnalysis) {
+                        if(!window.confirm("Gap analysis is still running in the background. Are you sure you want to close?")) return;
+                     }
+                     setShowGapModal(false);
+                  }} 
+                  className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors ml-2"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
+            <div id="gap-modal-content" className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
               {isRunningGapAnalysis ? (
                  <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-amber-500" />
@@ -1727,13 +1819,35 @@ END:VCALENDAR`;
                   <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
                     <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">Detected Documents</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <div className="p-4 bg-brand-blue/5 border border-brand-blue/20 rounded-xl">
+                       <div className="p-4 bg-brand-blue/5 border border-brand-blue/20 rounded-xl relative">
                           <span className="text-[10px] uppercase font-bold text-brand-blue mb-1 block">Franchise Agreement</span>
-                          <span className="font-semibold text-sm text-slate-800">{gapReportData.detected_franchise || "Not Found"}</span>
+                          <span className="font-semibold text-sm text-slate-800 pr-24 block truncate" title={gapReportData.detected_franchise}>{gapReportData.detected_franchise || "Not Found"}</span>
+                          {gapReportData.detected_franchise && gapReportData.detected_franchise !== "Not Found" && (
+                            <button 
+                               onClick={() => {
+                                 const doc = library.find(d => d.name === gapReportData.detected_franchise || d.filename === gapReportData.detected_franchise);
+                                 if(doc) handleDownloadOriginal(doc.id, doc.filename);
+                               }}
+                               className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] flex items-center gap-1 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-2 rounded transition-colors"
+                            >
+                               <Download size={12} /> PDF
+                            </button>
+                          )}
                        </div>
-                       <div className="p-4 bg-slate-100 border border-slate-200 rounded-xl">
+                       <div className="p-4 bg-slate-100 border border-slate-200 rounded-xl relative">
                           <span className="text-[10px] uppercase font-bold text-slate-500 mb-1 block">Lease Agreement</span>
-                          <span className="font-semibold text-sm text-slate-800">{gapReportData.detected_lease || "Not Found"}</span>
+                          <span className="font-semibold text-sm text-slate-800 pr-24 block truncate" title={gapReportData.detected_lease}>{gapReportData.detected_lease || "Not Found"}</span>
+                          {gapReportData.detected_lease && gapReportData.detected_lease !== "Not Found" && (
+                            <button 
+                               onClick={() => {
+                                 const doc = library.find(d => d.name === gapReportData.detected_lease || d.filename === gapReportData.detected_lease);
+                                 if(doc) handleDownloadOriginal(doc.id, doc.filename);
+                               }}
+                               className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] flex items-center gap-1 bg-white border border-slate-300 hover:bg-slate-200 text-slate-700 py-1.5 px-2 rounded transition-colors shadow-sm"
+                            >
+                               <Download size={12} /> PDF
+                            </button>
+                          )}
                        </div>
                     </div>
                   </div>
@@ -1827,20 +1941,27 @@ END:VCALENDAR`;
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Clock className="text-brand-accent" size={18} /> Master Timeline & Cast of Characters
               </h2>
-              <button 
-                onClick={() => {
-                   if(isGeneratingTimeline) {
-                      if(!window.confirm("Timeline generation is still running explicitly in the background. Are you sure you want to close?")) return;
-                   }
-                   setShowTimelineModal(false);
-                }} 
-                className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                <X size={16} />
-              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => executeTimelineGeneration(true)} disabled={isGeneratingTimeline} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isGeneratingTimeline ? "Extracting..." : "Refresh"}</button>
+                {library.map((doc, i) => (
+                    <button key={i} onClick={() => handleDownloadOriginal(doc.id, doc.filename)} className="text-xs flex items-center gap-1.5 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-3 rounded-md transition-colors" title={`Download ${doc.filename}`}><Download size={14}/> PDF {i+1}</button>
+                ))}
+                <button onClick={() => handleExportPDF("timeline-modal-content", "timeline_characters")} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
+                <button 
+                  onClick={() => {
+                     if(isGeneratingTimeline) {
+                        if(!window.confirm("Timeline generation is still running explicitly in the background. Are you sure you want to close?")) return;
+                     }
+                     setShowTimelineModal(false);
+                  }} 
+                  className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors ml-2"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
             
-            <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-white">
+            <div id="timeline-modal-content" className="flex-1 overflow-hidden flex flex-col md:flex-row bg-white">
               {isGeneratingTimeline ? (
                  <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-brand-accent" />
