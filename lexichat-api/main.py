@@ -174,8 +174,8 @@ async def chat_with_pdf(request: ChatRequest, current_user: Optional[models.User
     return await intelligence_service.chat_with_pdf(request, current_user, x_session_id, db)
 
 @app.get("/api/document/{doc_id}")
-async def get_document(doc_id: str):
-    return await data_service.get_document(doc_id)
+async def get_document(doc_id: str, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    return await data_service.get_document(doc_id, current_user, x_session_id, db)
 
 class ExportDocxRequest(BaseModel):
     text: str

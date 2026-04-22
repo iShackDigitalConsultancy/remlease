@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import glob
 from fastapi import HTTPException, Depends, Header, status, Form
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -127,9 +128,29 @@ def delete_workspace(ws_id: str, current_user: Optional[models.User] = Depends(g
     
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
+        
+    docs = db.query(models.WorkspaceDocument).filter(models.WorkspaceDocument.workspace_id == workspace.id).all()
+    for doc in docs:
+        try:
+            index.delete(ids=[doc.pinecone_doc_id], namespace="")
+        except Exception:
+            pass
+            
+        for ext in [".md", ".pdf", "_brief.json"]:
+            file_path = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}{ext}")
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                
+        for cache_file in glob.glob(os.path.join(UPLOAD_DIR, f"{doc.workspace_id}_*.json")):
+            if os.path.exists(cache_file):
+                os.remove(cache_file)
+                
+        db.delete(doc)
+        
+    db.flush()
     db.delete(workspace)
     db.commit()
-    return {"message": "Deleted"}
+    return {"message": "Workspace deleted successfully"}
 
 
 def rename_document(doc_id: str, request, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -170,14 +191,19 @@ def delete_document(doc_id: str, current_user: Optional[models.User] = Depends(g
 
     # Remove all Pinecone vectors for this document
     try:
-        index.delete(filter={"doc_id": {"$eq": doc_id}})
+        index.delete(ids=[doc.pinecone_doc_id], namespace="")
     except Exception as e:
         print(f"Pinecone delete warning (non-fatal): {e}")
 
-    # Remove the uploaded file from disk
-    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    # Remove the uploaded files from disk
+    for ext in [".md", ".pdf", "_brief.json"]:
+        file_path = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}{ext}")
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            
+    for cache_file in glob.glob(os.path.join(UPLOAD_DIR, f"{doc.workspace_id}_*.json")):
+        if os.path.exists(cache_file):
+            os.remove(cache_file)
 
     # Remove the DB record
     db.delete(doc)
@@ -186,8 +212,25 @@ def delete_document(doc_id: str, current_user: Optional[models.User] = Depends(g
 
 # Background tasks proxy
 
-async def get_document(doc_id: str):
-    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
+async def get_document(doc_id: str, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if not current_user and not x_session_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if current_user:
+        doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+            (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
+            models.Workspace.firm_id == current_user.firm_id
+        ).first()
+    else:
+        doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
+            (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
+            models.Workspace.session_id == x_session_id
+        ).first()
+
+    if not doc:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    file_path = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.pdf")
     if os.path.exists(file_path):
         return FileResponse(file_path, media_type="application/pdf")
     raise HTTPException(status_code=404, detail="Document not found, it may have been deleted.")

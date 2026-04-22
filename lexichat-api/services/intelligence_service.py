@@ -294,6 +294,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
             
+        filenames.append(doc.filename)
         file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
         if os.path.exists(file_path):
             try:
@@ -306,22 +307,24 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
+    example_filename = filenames[0] if filenames else "contract.pdf"
+
     map_task = "Extract all dates, terms, deadlines, and renewal notice periods from this section."
-    reduce_task = """Produce a chronological expiry schedule with calculated deadlines across the full document.
+    reduce_task = f"""Produce a chronological expiry schedule with calculated deadlines across the full document.
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
 Output ONLY valid JSON matching this exact structure:
-{
+{{
   "expiries": [
-    {
-      "document": "contract_name.pdf",
+    {{
+      "document": "{example_filename}",
       "commencement_date": "YYYY-MM-DD",
       "expiry_date": "YYYY-MM-DD",
       "renewal_deadline": "YYYY-MM-DD",
       "clause": "Text of the clause governing renewal/termination",
       "action_required": "Short description of what must happen"
-    }
+    }}
   ]
-}
+}}
 If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Perform strict date arithmetic if the contract specifies a start date and term duration. Return ONLY the JSON object."""
 
     def legacy_op():
@@ -337,7 +340,7 @@ Output ONLY valid JSON matching this exact structure:
 {{
   "expiries": [
     {{
-      "document": "contract_name.pdf",
+      "document": "{example_filename}",
       "commencement_date": "YYYY-MM-DD" (Extract the explicit start or signature date, or null if absolutely missing),
       "expiry_date": "YYYY-MM-DD" (EXTREMELY IMPORTANT: If missing, you MUST CALCULATE it by finding 'Commencement Date' or 'Signature Date' and adding 'Duration'/'Term'. E.g. start=2023-01-01 + duration 5 years = 2028-01-01),
       "renewal_deadline": "YYYY-MM-DD" (Calculate from expiry date minus notice period if applicable),
@@ -381,6 +384,7 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
             
+        filenames.append(doc.filename)
         file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
         if os.path.exists(file_path):
             try:
@@ -393,23 +397,26 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
+    lease_filename = filenames[0] if len(filenames) > 0 else "Lease_Document"
+    franchise_filename = filenames[1] if len(filenames) > 1 else "Franchise_Document"
+
     map_task = "Extract all obligations, restrictions, and operational requirements from this section."
-    reduce_task = """Cross-reference franchise obligations against lease provisions and list every misalignment found. Flag uncertain matches explicitly.
+    reduce_task = f"""Cross-reference franchise obligations against lease provisions and list every misalignment found. Flag uncertain matches explicitly.
 Output exactly this JSON structure:
-{
-  "detected_lease": "FileName (or null)",
-  "detected_franchise": "FileName (or null)",
-  "lease_key_terms": { "term": "...", "expiry": "...", "permitted_use": "..." },
-  "franchise_key_terms": { "term": "...", "expiry": "...", "permitted_use": "..." },
+{{
+  "detected_lease": "{lease_filename}",
+  "detected_franchise": "{franchise_filename}",
+  "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
+  "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
   "gaps": [
-    {
+    {{
       "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
       "franchise_requirement": "What does the franchise demand?",
       "lease_provision": "What does the lease actually say?",
       "status": "RISK" or "MATCH" or "WARNING"
-    }
+    }}
   ]
-}
+}}
 If only one document type is uploaded, map whatever you can and put 'null' for the missing one. Return ONLY valid JSON."""
 
     def legacy_op():
@@ -424,8 +431,8 @@ DOCUMENTS TEXT:
 INSTRUCTIONS:
 Output exactly this JSON structure:
 {{
-  "detected_lease": "FileName (or null)",
-  "detected_franchise": "FileName (or null)",
+  "detected_lease": "{lease_filename}",
+  "detected_franchise": "{franchise_filename}",
   "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
   "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
   "gaps": [
@@ -469,6 +476,7 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
         return {"data": []}
         
     full_text = ""
+    example_objects = []
     # Process up to 10 documents, taking 6000 characters each to avoid heavy context limits.
     for doc in docs[:10]:
         file_path = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.md")
@@ -480,25 +488,26 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                 with open(file_path, "r") as f:
                     doc_text = f.read()
                 full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
+                example_objects.append(f"""  {{
+    "filename": "{doc.filename}",
+    "doc_type": "Lease OR Franchise Agreement OR Unknown",
+    "expiry_date": "YYYY-MM-DD",
+    "renewal_deadline": "YYYY-MM-DD",
+    "key_terms": "1-sentence summary of the most important term or permitted use",
+    "flags": "Any major risks, unusual clauses or Management Alerts"
+  }}""")
             except Exception as e:
                 pass
                 
     if not full_text:
         return {"data": []}
 
+    example_json_array = "[\n" + ",\n".join(example_objects) + "\n]"
+
     map_task = "Extract key financial terms, parties, and material obligations from this section."
-    reduce_task = """Produce a portfolio dashboard of key terms across all documents. Flag documents where extraction confidence was low.
+    reduce_task = f"""Produce a portfolio dashboard of key terms across all documents. Flag documents where extraction confidence was low.
 Output exactly this JSON structure as an array of objects:
-[
-  {
-    "filename": "Exact Name of the Document",
-    "doc_type": "Lease" OR "Franchise Agreement" OR "Unknown",
-    "expiry_date": "YYYY-MM-DD",
-    "renewal_deadline": "YYYY-MM-DD",
-    "key_terms": "1-sentence summary of the most important term or permitted use",
-    "flags": "Any major risks, unusual clauses or Management Alerts"
-  }
-]
+{example_json_array}
 Ensure the JSON is perfectly valid and is just the array. Ensure you include EVERY specific document listed in the text."""
 
     async def generate_response():
@@ -546,16 +555,7 @@ DOCUMENTS TEXT:
 
 INSTRUCTIONS:
 Output exactly this JSON structure as an array of objects:
-[
-  {{
-    "filename": "Exact Name of the Document",
-    "doc_type": "Lease" OR "Franchise Agreement" OR "Unknown",
-    "expiry_date": "YYYY-MM-DD" (EXTREMELY IMPORTANT: If the expiry date is not explicitly stated, you MUST CALCULATE it by finding the 'Commencement Date' or 'Signature Date' and adding the 'Duration' or 'Term'. For example, if commencement is 1 July 2023 and duration is 5 years, calculate and output 2028-06-30.),
-    "renewal_deadline": "YYYY-MM-DD" (Calculate based on the expiry date if it requires N months notice, or null if not found.),
-    "key_terms": "1-sentence summary of the most important term or permitted use",
-    "flags": "Any major risks, unusual clauses or Management Alerts"
-  }}
-]
+{example_json_array}
 Ensure the JSON is perfectly valid and is just the array. Do not output anything else.
 Ensure you include EVERY specific document listed in the text."""
             try:
