@@ -123,6 +123,7 @@ async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file:
 class AuditRequest(BaseModel):
     doc_id: str
     policy: str
+    force_refresh: bool = False
 
 @app.post("/api/audit")
 async def document_audit(payload: AuditRequest, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -137,6 +138,7 @@ async def extract_timeline(payload: TimelineExtractionRequest, current_user: Opt
 
 class ExpiryExtractionRequest(BaseModel):
     doc_ids: List[str]
+    force_refresh: bool = False
 
 @app.post("/api/extract-expiries")
 async def extract_expiries(payload: ExpiryExtractionRequest, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -144,6 +146,7 @@ async def extract_expiries(payload: ExpiryExtractionRequest, current_user: Optio
 
 class GapAnalysisRequest(BaseModel):
     doc_ids: List[str]
+    force_refresh: bool = False
 
 @app.post("/api/gap-analysis")
 async def gap_analysis(payload: GapAnalysisRequest, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -157,6 +160,7 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
 class CompareRequest(BaseModel):
     doc_id_a: str
     doc_id_b: str
+    force_refresh: bool = False
 
 @app.post("/api/compare")
 async def document_compare(payload: CompareRequest, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):

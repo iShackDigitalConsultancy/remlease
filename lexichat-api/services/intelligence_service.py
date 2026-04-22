@@ -12,6 +12,25 @@ from services.map_reduce import run_feature_gated_pipeline
 from auth import get_current_user_optional
 from database import get_db
 
+async def cached_pipeline_stream(cache_path: str, force_refresh: bool, pipeline_gen):
+    if not force_refresh and os.path.exists(cache_path):
+        with open(cache_path, "r") as f:
+            cached = json.load(f)
+        yield f"data: {json.dumps({'status': 'complete', 'data': cached})}\n\n"
+        return
+        
+    async for chunk in pipeline_gen:
+        yield chunk
+        if chunk.startswith("data: "):
+            try:
+                data_obj = json.loads(chunk[6:])
+                if data_obj.get("status") == "complete":
+                    with open(cache_path, "w") as f:
+                        json.dump(data_obj.get("data"), f)
+            except Exception:
+                pass
+
+
 def get_embedding(text: str):
     return vo.embed([text], model="voyage-law-2").embeddings[0]
 
@@ -175,7 +194,9 @@ Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON arra
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return {"audit": json.loads(raw)}
 
-    return StreamingResponse(run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op), media_type="text/event-stream")
+    workspace_id = doc.workspace_id
+    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_audit.json")
+    return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
 async def extract_timeline(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -280,6 +301,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
         
     full_text: str = ""
     filenames = []
+    workspace_id = None
     for doc_id in payload.doc_ids:
         if current_user is not None:
             doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
@@ -294,6 +316,9 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
             
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
+            
+        if not workspace_id:
+            workspace_id = doc.workspace_id
             
         filenames.append(doc.filename)
         file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
@@ -362,7 +387,8 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return json.loads(raw)
 
-    return StreamingResponse(run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op), media_type="text/event-stream")
+    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
+    return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
 async def gap_analysis(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -371,6 +397,7 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
         
     full_text: str = ""
     filenames = []
+    workspace_id = None
     for doc_id in payload.doc_ids:
         if current_user is not None:
             doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
@@ -385,6 +412,9 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
             
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
+            
+        if not workspace_id:
+            workspace_id = doc.workspace_id
             
         filenames.append(doc.filename)
         file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
@@ -459,7 +489,8 @@ Return ONLY valid JSON."""
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return json.loads(raw)
 
-    return StreamingResponse(run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op), media_type="text/event-stream")
+    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_gap_analysis.json")
+    return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
 async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -590,6 +621,7 @@ async def document_compare(payload, current_user: Optional[models.User] = Depend
         raise HTTPException(status_code=400, detail="Must select two different documents to compare")
         
     doc_texts = {}
+    workspace_id = None
     
     for doc_id in [payload.doc_id_a, payload.doc_id_b]:
         if current_user:
@@ -605,6 +637,9 @@ async def document_compare(payload, current_user: Optional[models.User] = Depend
             
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
+            
+        if not workspace_id:
+            workspace_id = doc.workspace_id
             
         file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
         if not os.path.exists(file_path):
@@ -698,7 +733,8 @@ Return ONLY the raw JSON object. Do not wrap in markdown code blocks."""
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return json.loads(raw)
 
-    return StreamingResponse(run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op), media_type="text/event-stream")
+    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_compare.json")
+    return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
 async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
