@@ -1408,7 +1408,7 @@ def migrate_voyage_admin(
     missing = []
     
     for doc in docs:
-        path = os.path.join(UPLOAD_DIR, f"{doc.id}.md")
+        path = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.md")
         if os.path.exists(path) and os.path.getsize(path) > 0:
             readable += 1
         else:
@@ -1459,7 +1459,7 @@ def migrate_voyage_admin(
         failed_documents = []
         
         for doc in docs:
-            path = os.path.join(UPLOAD_DIR, f"{doc.id}.md")
+            path = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.md")
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     text_content = f.read()
