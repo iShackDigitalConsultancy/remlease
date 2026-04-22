@@ -120,6 +120,63 @@ async def document_audit(payload, current_user: Optional[models.User] = Depends(
 
     map_task = f"Extract all policy clauses, compliance obligations, and risk provisions from this section."
     reduce_task = f"""Produce a structured audit report flagging all compliance risks and policy gaps against this strictly provided policy:
+{payload.policy}
+
+Deduplicate identical violations found across different sections.
+Output ONLY valid JSON matching this exact array structure:
+[
+  {{
+    "check": "Rule 1 from the policy",
+    "status": "PASS", 
+    "explanation": "Brief explanation of why it passed, quoting the text if possible."
+  }},
+  {{
+    "check": "Rule 2 from the policy",
+    "status": "FAIL", 
+    "explanation": "Explanation of why it failed or is missing."
+  }}
+]
+Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON array."""
+
+    def legacy_op():
+        doc_text = str(full_text)[:18000]
+        prompt = f"""You are a senior legal auditor reviewing a document against a strict Compliance Policy.
+    
+POLICY TO CHECK THE DOCUMENT AGAINST:
+{payload.policy}
+
+DOCUMENT TEXT:
+{doc_text}
+
+INSTRUCTIONS:
+Evaluate the document strictly against the policy above. 
+Output ONLY valid JSON matching this exact array structure:
+[
+  {{
+    "check": "Rule 1 from the policy",
+    "status": "PASS", 
+    "explanation": "Brief explanation of why it passed, quoting the text if possible."
+  }},
+  {{
+    "check": "Rule 2 from the policy",
+    "status": "FAIL", 
+    "explanation": "Explanation of why it failed or is missing."
+  }}
+]
+
+Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON array."""
+        resp = groq_client.chat.completions.create(
+            model='llama-3.3-70b-versatile',
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.0,
+            max_tokens=2000
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        return {"audit": json.loads(raw)}
+
+    return StreamingResponse(run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op), media_type="text/event-stream")
+
 
 async def extract_timeline(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
     if not payload.doc_ids:
@@ -156,6 +213,66 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
 
     map_task = "Extract all dated events, milestones, and party obligations from this section."
     reduce_task = """Produce a chronological timeline of all events across the full document.
+JSON SCHEMA REQUIREMENT:
+{
+  "characters": [
+    {
+      "name": "Jane Doe",
+      "role": "Plaintiff",
+      "description": "Former employee of the company..."
+    }
+  ],
+  "timeline": [
+    {
+      "date": "2023-01-15",
+      "event": "Employment Contract Signed",
+      "source": "contract.pdf"
+    }
+  ]
+}
+If a date is vague, express it as roughly as possible inside the date field. Make sure the timeline array chronologically ordered from oldest to newest. Return ONLY the raw JSON object."""
+
+    def legacy_op():
+        old_full_text = str(full_text)[:18000]
+        prompt = f"""You are a senior legal analyst creating a comprehensive chronologically-ordered Master Timeline and Cast of Characters from the provided documents.
+
+DOCUMENTS TEXT:
+{old_full_text}
+
+INSTRUCTIONS:
+1. Identify all key people, organizations, or entities mentioned (Cast of Characters).
+2. Extract all events with implied or explicit dates into a unified Master Timeline.
+3. Output ONLY valid JSON matching this exact structure:
+{{
+  "characters": [
+    {{
+      "name": "Jane Doe",
+      "role": "Plaintiff",
+      "description": "Former employee of the company..."
+    }}
+  ],
+  "timeline": [
+    {{
+      "date": "2023-01-15",
+      "event": "Employment Contract Signed",
+      "source": "contract.pdf"
+    }}
+  ]
+}}
+
+If a date is vague (e.g. "Early 2023"), express it as roughly as possible inside the date field. Make sure the timeline array chronologically ordered from oldest to newest. Return ONLY the raw JSON object."""
+        resp = groq_client.chat.completions.create(
+            model='llama-3.3-70b-versatile',
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.0,
+            max_tokens=3000
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        return json.loads(raw)
+
+    return StreamingResponse(run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op), media_type="text/event-stream")
+
 
 async def extract_expiries(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
     if not payload.doc_ids:
@@ -191,6 +308,58 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
 
     map_task = "Extract all dates, terms, deadlines, and renewal notice periods from this section."
     reduce_task = """Produce a chronological expiry schedule with calculated deadlines across the full document.
+Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
+Output ONLY valid JSON matching this exact structure:
+{
+  "expiries": [
+    {
+      "document": "contract_name.pdf",
+      "commencement_date": "YYYY-MM-DD",
+      "expiry_date": "YYYY-MM-DD",
+      "renewal_deadline": "YYYY-MM-DD",
+      "clause": "Text of the clause governing renewal/termination",
+      "action_required": "Short description of what must happen"
+    }
+  ]
+}
+If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Perform strict date arithmetic if the contract specifies a start date and term duration. Return ONLY the JSON object."""
+
+    def legacy_op():
+        old_full_text = str(full_text)[:18000]
+        prompt = f"""You are a senior legal analyst extracting crucial dates from multiple contracts to trigger calendar/SmartBuilding events.
+
+DOCUMENTS TEXT:
+{old_full_text}
+
+INSTRUCTIONS:
+Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
+Output ONLY valid JSON matching this exact structure:
+{{
+  "expiries": [
+    {{
+      "document": "contract_name.pdf",
+      "commencement_date": "YYYY-MM-DD" (Extract the explicit start or signature date, or null if absolutely missing),
+      "expiry_date": "YYYY-MM-DD" (EXTREMELY IMPORTANT: If missing, you MUST CALCULATE it by finding 'Commencement Date' or 'Signature Date' and adding 'Duration'/'Term'. E.g. start=2023-01-01 + duration 5 years = 2028-01-01),
+      "renewal_deadline": "YYYY-MM-DD" (Calculate from expiry date minus notice period if applicable),
+      "clause": "Text of the clause governing renewal/termination",
+      "action_required": "Short description of what must happen"
+    }}
+  ]
+}}
+
+If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Perform strict date arithmetic if the contract specifies a start date and term duration. Return ONLY the JSON object."""
+        resp = groq_client.chat.completions.create(
+            model='llama-3.3-70b-versatile',
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.0,
+            max_tokens=2000
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        return json.loads(raw)
+
+    return StreamingResponse(run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op), media_type="text/event-stream")
+
 
 async def gap_analysis(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
     if len(payload.doc_ids) < 2:
@@ -226,6 +395,63 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
 
     map_task = "Extract all obligations, restrictions, and operational requirements from this section."
     reduce_task = """Cross-reference franchise obligations against lease provisions and list every misalignment found. Flag uncertain matches explicitly.
+Output exactly this JSON structure:
+{
+  "detected_lease": "FileName (or null)",
+  "detected_franchise": "FileName (or null)",
+  "lease_key_terms": { "term": "...", "expiry": "...", "permitted_use": "..." },
+  "franchise_key_terms": { "term": "...", "expiry": "...", "permitted_use": "..." },
+  "gaps": [
+    {
+      "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
+      "franchise_requirement": "What does the franchise demand?",
+      "lease_provision": "What does the lease actually say?",
+      "status": "RISK" or "MATCH" or "WARNING"
+    }
+  ]
+}
+If only one document type is uploaded, map whatever you can and put 'null' for the missing one. Return ONLY valid JSON."""
+
+    def legacy_op():
+        old_full_text = str(full_text)[:24000]
+        prompt = f"""You are a master commercial real estate and franchise attorney.
+The user has uploaded multiple documents. Your job is to automatically detect which is the Franchise Agreement and which is the Lease Agreement. Then, cross-reference them to find gaps, conflicts, and risks. 
+Provide key terms and a critical mismatch report.
+
+DOCUMENTS TEXT:
+{old_full_text}
+
+INSTRUCTIONS:
+Output exactly this JSON structure:
+{{
+  "detected_lease": "FileName (or null)",
+  "detected_franchise": "FileName (or null)",
+  "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
+  "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
+  "gaps": [
+    {{
+      "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
+      "franchise_requirement": "What does the franchise demand?",
+      "lease_provision": "What does the lease actually say?",
+      "status": "RISK" or "MATCH" or "WARNING"
+    }}
+  ]
+}}
+
+If only one document type is uploaded, map whatever you can and put 'null' for the missing one.
+Return ONLY valid JSON."""
+        resp = groq_client.chat.completions.create(
+            model='llama-3.3-70b-versatile',
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.0,
+            max_tokens=3000
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        return json.loads(raw)
+
+    return StreamingResponse(run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op), media_type="text/event-stream")
+
 
 async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
     if current_user:
@@ -262,6 +488,100 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
 
     map_task = "Extract key financial terms, parties, and material obligations from this section."
     reduce_task = """Produce a portfolio dashboard of key terms across all documents. Flag documents where extraction confidence was low.
+Output exactly this JSON structure as an array of objects:
+[
+  {
+    "filename": "Exact Name of the Document",
+    "doc_type": "Lease" OR "Franchise Agreement" OR "Unknown",
+    "expiry_date": "YYYY-MM-DD",
+    "renewal_deadline": "YYYY-MM-DD",
+    "key_terms": "1-sentence summary of the most important term or permitted use",
+    "flags": "Any major risks, unusual clauses or Management Alerts"
+  }
+]
+Ensure the JSON is perfectly valid and is just the array. Ensure you include EVERY specific document listed in the text."""
+
+    async def generate_response():
+        use_map_reduce = os.environ.get("USE_MAP_REDUCE", "False").lower() in ("true", "1", "yes")
+        
+        if use_map_reduce:
+            from services.map_reduce import run_map_reduce_stream
+            final = None
+            async for chunk in run_map_reduce_stream(full_text, map_task, reduce_task):
+                if '"status": "complete"' in chunk:
+                    try:
+                        obj = json.loads(chunk[6:])
+                        final = obj.get("data", [])
+                    except:
+                        final = []
+                else:
+                    yield chunk
+                    
+            if final is not None:
+                for item in final:
+                    matched_doc = next((d for d in docs if d.filename == item.get("filename")), None)
+                    if matched_doc:
+                        item["workspace_id"] = getattr(matched_doc, "workspace_id", None)
+                        item["doc_id"] = getattr(matched_doc, "id", None)
+                yield f"data: {json.dumps({'status': 'complete', 'data': final})}\n\n"
+        else:
+            yield f"data: {json.dumps({'status': 'processing', 'message': 'Analysing document (Legacy Mode)...'})}\n\n"
+            
+            # Legacy logic
+            legacy_text = ""
+            for doc in docs[:10]:
+                fp = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.md")
+                if not os.path.exists(fp):
+                    fp = os.path.join(UPLOAD_DIR, f"{doc.id}.md")
+                if os.path.exists(fp):
+                    with open(fp, "r") as f:
+                        t = f.read()
+                    legacy_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{str(t)[:6000]}\n"
+                    
+            prompt = f"""You are an expert commercial leasing manager. Review the following portfolio of lease and franchise agreements.
+For each document provided, extract the critical terms for a global management dashboard.
+
+DOCUMENTS TEXT:
+{legacy_text}
+
+INSTRUCTIONS:
+Output exactly this JSON structure as an array of objects:
+[
+  {{
+    "filename": "Exact Name of the Document",
+    "doc_type": "Lease" OR "Franchise Agreement" OR "Unknown",
+    "expiry_date": "YYYY-MM-DD" (EXTREMELY IMPORTANT: If the expiry date is not explicitly stated, you MUST CALCULATE it by finding the 'Commencement Date' or 'Signature Date' and adding the 'Duration' or 'Term'. For example, if commencement is 1 July 2023 and duration is 5 years, calculate and output 2028-06-30.),
+    "renewal_deadline": "YYYY-MM-DD" (Calculate based on the expiry date if it requires N months notice, or null if not found.),
+    "key_terms": "1-sentence summary of the most important term or permitted use",
+    "flags": "Any major risks, unusual clauses or Management Alerts"
+  }}
+]
+Ensure the JSON is perfectly valid and is just the array. Do not output anything else.
+Ensure you include EVERY specific document listed in the text."""
+            try:
+                resp = groq_client.chat.completions.create(
+                    model='llama-3.3-70b-versatile',
+                    messages=[{'role': 'user', 'content': prompt}],
+                    temperature=0.0,
+                    max_tokens=4000
+                )
+                raw = resp.choices[0].message.content.strip()
+                raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+                result = json.loads(raw)
+                
+                for item in result:
+                    matched_doc = next((d for d in docs if d.filename == item.get("filename")), None)
+                    if matched_doc:
+                        item["workspace_id"] = getattr(matched_doc, "workspace_id", None)
+                        item["doc_id"] = getattr(matched_doc, "id", None)
+                        
+                yield f"data: {json.dumps({'status': 'complete', 'data': result})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'status': 'error', 'message': 'Failed to analyse portfolio'})}\n\n"
+
+    return StreamingResponse(generate_response(), media_type="text/event-stream")
+
+
 
 async def document_compare(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
     if payload.doc_id_a == payload.doc_id_b:
@@ -299,6 +619,85 @@ async def document_compare(payload, current_user: Optional[models.User] = Depend
 
     map_task = "Extract all material terms, obligations, and risk clauses from this section. Retain context of which document this belongs to (Document A or Document B)."
     reduce_task = """Produce a forensic redline diff of ADDED, MODIFIED, and DELETED provisions between the two documents. Flag any sections where comparison was limited by content quality.
+JSON SCHEMA REQUIREMENT:
+{
+  "risk_summary": "A 2-3 sentence executive summary explaining how the risk profile has shifted from Document A to Document B.",
+  "changes": [
+    {
+      "type": "ADDED",
+      "original_text": null,
+      "new_text": "Exact text added to Document B",
+      "impact": "High/Med/Low impact: Short explanation of legal implication."
+    },
+    {
+      "type": "DELETED",
+      "original_text": "Exact text removed from Document A",
+      "new_text": null,
+      "impact": "High/Med/Low impact: Short explanation of legal implication."
+    },
+    {
+      "type": "MODIFIED",
+      "original_text": "Exact original clause in Document A",
+      "new_text": "Exact new clause in Document B",
+      "impact": "High/Med/Low impact: Short explanation of how the modification shifts obligation."
+    }
+  ]
+}
+Return ONLY the raw JSON object."""
+
+    def legacy_op():
+        doc_a_old = str(doc_texts[payload.doc_id_a])[:9000]
+        doc_b_old = str(doc_texts[payload.doc_id_b])[:9000]
+        prompt = f"""You are a master legal analyst conducting a forensic "redline" comparison between an original document and a modified draft. 
+    
+DOCUMENT A (Original / Base Document):
+{doc_a_old}
+
+DOCUMENT B (Modified / Counter-party Draft):
+{doc_b_old}
+
+INSTRUCTIONS:
+Carefully compare the documents. Output a structured forensic difference report in valid JSON.
+Ignore cosmetic or stylistic wording changes (like whitespace or font). Focus strictly on substantive legal/obligational changes.
+
+JSON SCHEMA REQUIREMENT:
+{{
+  "risk_summary": "A 2-3 sentence executive summary explaining how the risk profile has shifted from Document A to Document B.",
+  "changes": [
+    {{
+      "type": "ADDED",
+      "original_text": null,
+      "new_text": "Exact text added to Document B",
+      "impact": "High/Med/Low impact: Short explanation of legal implication."
+    }},
+    {{
+      "type": "DELETED",
+      "original_text": "Exact text removed from Document A",
+      "new_text": null,
+      "impact": "High/Med/Low impact: Short explanation of legal implication."
+    }},
+    {{
+      "type": "MODIFIED",
+      "original_text": "Exact original clause in Document A",
+      "new_text": "Exact new clause in Document B",
+      "impact": "High/Med/Low impact: Short explanation of how the modification shifts obligation."
+    }}
+  ]
+}}
+
+Return ONLY the raw JSON object. Do not wrap in markdown code blocks."""
+        resp = groq_client.chat.completions.create(
+            model='llama-3.3-70b-versatile',
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.0,
+            max_tokens=4000
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+        return json.loads(raw)
+
+    return StreamingResponse(run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op), media_type="text/event-stream")
+
 
 async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
     try:
