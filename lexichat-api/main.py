@@ -1376,6 +1376,8 @@ async def export_to_docx(request: ExportDocxRequest):
                         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         headers=headers)
     except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate DOCX export: {str(e)}")
+
 class MigrationAdminRequest(BaseModel):
     dry_run: bool
 
