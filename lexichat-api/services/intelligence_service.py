@@ -279,6 +279,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
         raise HTTPException(status_code=400, detail="No documents selected")
         
     full_text: str = ""
+    filenames = []
     for doc_id in payload.doc_ids:
         if current_user is not None:
             doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
@@ -369,6 +370,7 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
         raise HTTPException(status_code=400, detail="At least two documents required to run a gap analysis.")
         
     full_text: str = ""
+    filenames = []
     for doc_id in payload.doc_ids:
         if current_user is not None:
             doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
