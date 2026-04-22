@@ -17,7 +17,6 @@ models.Base.metadata.create_all(bind=engine)
 
 from pinecone import Pinecone, ServerlessSpec
 from groq import Groq
-from sentence_transformers import SentenceTransformer
 import uuid
 import os
 import io
@@ -26,7 +25,7 @@ import docx
 import requests
 import time
 import re
-from sentence_transformers import SentenceTransformer, CrossEncoder
+import voyageai
 
 app = FastAPI(title="REM-Leases API")
 
@@ -54,29 +53,30 @@ app.add_middleware(
 # Initialize Cloud Clients
 pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+vo = voyageai.Client(api_key=os.environ.get("VOYAGE_API_KEY"))
 
 index_name = "lekkerpilot"
 if index_name not in pc.list_indexes().names():
     pc.create_index(
         name=index_name,
-        dimension=384,  # all-MiniLM-L6-v2 output dimension
+        dimension=1024,  # voyage-law-2 output dimension
         metric="cosine",
         spec=ServerlessSpec(cloud="aws", region="us-east-1")
     )
 index = pc.Index(index_name)
 
-# Initialize local embedding model for insanely fast, free vectorization
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-
 def get_embedding(text: str):
-    return embedding_model.encode(text).tolist()
+    return vo.embed([text], model="voyage-law-2").embeddings[0]
 
 def get_embeddings(texts: List[str]):
-    # Drastically reduce batch_size to prevent OOM killed on Railway's 512MB RAM limit
-    return embedding_model.encode(texts, batch_size=4, show_progress_bar=False).tolist()
-
-# Cross-encoder reranker — re-scores Pinecone hits for precision
-reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+    all_embeddings = []
+    for i in range(0, len(texts), 50):
+        batch = texts[i:i+50]
+        result = vo.embed(batch, model="voyage-law-2")
+        all_embeddings.extend(result.embeddings)
+        if i + 50 < len(texts):
+            time.sleep(2)
+    return all_embeddings
 
 # ── Smart legal chunking ──────────────────────────────────────────────────────
 CLAUSE_PATTERN = re.compile(
@@ -1255,12 +1255,10 @@ async def chat_with_pdf(request: ChatRequest, current_user: Optional[models.User
         if not matches:
             context = "No relevant context found in the document."
         else:
-            # ── Rerank with cross-encoder for precision ───────────────────────
             query_text = request.query
-            pairs = [(query_text, r.get('metadata', {}).get('text', '')) for r in matches]
-            scores = reranker.predict(pairs)
-            ranked = sorted(zip(scores, matches), key=lambda x: x[0], reverse=True)
-            top_matches = [m for _, m in ranked[:12]]  # Keep best 12 chunks only (High-precision cutoff)
+            candidates = [r.get('metadata', {}).get('text', '') for r in matches]
+            reranked = vo.rerank(query_text, candidates, model="rerank-2", top_k=12)
+            top_matches = [matches[r.index] for r in reranked.results]
 
             # Force-anchor Page 1 definition contexts to bypass violent vector filtering failures
             page_one_anchors = []
@@ -1378,7 +1376,140 @@ async def export_to_docx(request: ExportDocxRequest):
                         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         headers=headers)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+class MigrationAdminRequest(BaseModel):
+    dry_run: bool
+
+@app.post("/api/admin/migrate-voyage")
+def migrate_voyage_admin(
+    request: MigrationAdminRequest, 
+    request_headers: Request, 
+    db: Session = Depends(get_db)
+):
+    import json
+    import time
+    admin_key = os.environ.get("MIGRATION_ADMIN_KEY")
+    req_key = request_headers.headers.get("X-Admin-Key")
+    
+    if not admin_key or req_key != admin_key:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    docs = db.query(models.WorkspaceDocument).all()
+    readable = 0
+    missing = []
+    
+    for doc in docs:
+        path = f"/app/uploads/{doc.id}.md"
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            readable += 1
+        else:
+            missing.append(doc.id)
+            
+    if request.dry_run:
+        return {
+            "mode": "dry_run",
+            "total_documents": len(docs),
+            "readable": readable,
+            "missing": missing,
+            "ready_to_migrate": len(missing) == 0
+        }
+    
+    if missing:
+        return {"error": "Missing documents", "missing": missing, "status": "failed"}
+
+    def migration_stream():
+        import voyageai
+        from pinecone import Pinecone, ServerlessSpec
+        
+        yield json.dumps({"status": "starting", "message": "Deleting index..."}) + "\n"
+        pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
+        try:
+            pc.delete_index("lekkerpilot")
+        except Exception as e:
+            pass
+            
+        yield json.dumps({"status": "waiting", "message": "Sleeping 10s..."}) + "\n"
+        time.sleep(10)
+        
+        yield json.dumps({"status": "creating", "message": "Creating index 1024d..."}) + "\n"
+        pc.create_index(
+            name="lekkerpilot", 
+            dimension=1024, 
+            metric="cosine", 
+            spec=ServerlessSpec(cloud="aws", region="us-east-1")
+        )
+        
+        yield json.dumps({"status": "waiting", "message": "Sleeping 30s..."}) + "\n"
+        time.sleep(30)
+        
+        index = pc.Index("lekkerpilot")
+        vo = voyageai.Client(api_key=os.environ.get("VOYAGE_API_KEY"))
+        
+        docs_migrated = 0
+        vectors_upserted = 0
+        failed_documents = []
+        
+        for doc in docs:
+            path = f"/app/uploads/{doc.id}.md"
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    text_content = f.read()
+                raw_splits = CLAUSE_PATTERN.split(text_content)
+                splits = [s.strip() for s in raw_splits if s and s.strip()]
+                if not splits:
+                    splits = [text_content]
+                
+                chunks = []
+                buffer = ""
+                for split in splits:
+                    if len(buffer) + len(split) <= 1500:
+                        buffer += ("\n" if buffer else "") + split
+                    else:
+                        if buffer:
+                            chunks.append(buffer)
+                        buffer = split
+                if buffer:
+                    chunks.append(buffer)
+                    
+                batch_size = 50
+                for i in range(0, len(chunks), batch_size):
+                    batch = chunks[i:i+batch_size]
+                    result = vo.embed(batch, model="voyage-law-2")
+                    
+                    vectors_to_upsert = []
+                    for j, emb in enumerate(result.embeddings):
+                        vectors_to_upsert.append({
+                            "id": f"{doc.pinecone_doc_id}_chunk_{i+j}",
+                            "values": emb,
+                            "metadata": {
+                                "firm_id": doc.workspace.firm_id if doc.workspace and doc.workspace.firm_id else "none",
+                                "workspace_id": doc.workspace_id,
+                                "doc_id": doc.id,
+                                "text": batch[j]
+                            }
+                        })
+                    index.upsert(vectors=vectors_to_upsert)
+                    vectors_upserted += len(vectors_to_upsert)
+                    
+                    if i + batch_size < len(chunks):
+                        time.sleep(2)
+                        
+                docs_migrated += 1
+                yield json.dumps({"status": "progress", "message": f"Ingested doc {docs_migrated} of {len(docs)}: {doc.id}"}) + "\n"
+                
+            except Exception as e:
+                failed_documents.append(doc.id)
+                yield json.dumps({"status": "error", "message": f"Failed doc {doc.id}: {str(e)}"}) + "\n"
+                
+        yield json.dumps({
+            "mode": "migration",
+            "documents_migrated": docs_migrated,
+            "vectors_upserted": vectors_upserted,
+            "failed_documents": failed_documents,
+            "status": "complete"
+        }) + "\n"
+        
+    return StreamingResponse(migration_stream(), media_type="application/x-ndjson")
+
 
 if __name__ == "__main__":
     import uvicorn
