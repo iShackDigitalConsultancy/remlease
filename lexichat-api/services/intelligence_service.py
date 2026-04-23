@@ -137,7 +137,7 @@ async def document_audit(payload, current_user: Optional[models.User] = Depends(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read local document: {str(e)}")
 
-    map_task = f"Extract all policy clauses, compliance obligations, and risk provisions from this section. Also extract: property location, parties, and any compliance obligations per party."
+    map_task = f"Extract all policy clauses, compliance obligations, and risk provisions from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., parties, and any compliance obligations per party."
     reduce_task = f"""Produce a structured audit report flagging all compliance risks and policy gaps against this strictly provided policy:
 {payload.policy}
 
@@ -145,7 +145,7 @@ Deduplicate identical violations found across different sections.
 Output ONLY valid JSON matching this exact array structure:
 {{
   "document_context": {{
-    "location": "Full property address or premises description",
+    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
     "parties": [
       {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
     ],
@@ -190,7 +190,7 @@ Evaluate the document strictly against the policy above.
 Output ONLY valid JSON matching this exact structure:
 {{
   "document_context": {{
-    "location": "Full property address or premises description",
+    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
     "parties": [
       {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
     ],
@@ -268,7 +268,7 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
-    map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, premises description and address, lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, payment/banking details, renewal options, special conditions, and suretyship details."
+    map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, payment/banking details, renewal options, special conditions, and suretyship details. If the document uses a PREAMBLE or numbered clause format instead of a schedule table, extract the same information from those sections. Look for LESSOR/LESSEE definitions, PREMISES description in clause 1, COMMENCEMENT DATE in clause 3, EXPIRY DATE in clause 3, BASIC MONTHLY RENTAL in clause 4 tables, DEPOSITS in clause 8, SPECIAL CONDITIONS in clause 16."
     reduce_task = """Produce a comprehensive summary of all fundamental lease terms.
 JSON SCHEMA REQUIREMENT:
 {{
@@ -287,7 +287,7 @@ JSON SCHEMA REQUIREMENT:
     }},
     "premises": {{
       "description": "string",
-      "address": "string",
+      "address": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
       "erf": "string"
     }},
     "lease_period": "string",
@@ -337,7 +337,7 @@ Output ONLY valid JSON matching this exact structure:
   "fundamental_terms": {{
     "lessor": {{ "name": "string", "registration": "string", "representative": "string", "domicilium": "string" }},
     "lessee": {{ "name": "string", "registration": "string", "representative": "string", "domicilium": "string" }},
-    "premises": {{ "description": "string", "address": "string", "erf": "string" }},
+    "premises": {{ "description": "string", "address": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.", "erf": "string" }},
     "lease_period": "string",
     "commencement_date": "YYYY-MM-DD",
     "expiry_date": "YYYY-MM-DD",
@@ -408,13 +408,13 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
 
     example_filename = filenames[0] if filenames else "contract.pdf"
 
-    map_task = "Extract all dates, terms, deadlines, and renewal notice periods from this section. Also extract: the physical property address or premises description, all party names and roles, and any material obligations found in this section."
-    reduce_task = f"""Produce a chronological expiry schedule with calculated deadlines across the full document.
+    map_task = "Extract all dates, terms, deadlines, and renewal notice periods from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., all party names and roles, and any material obligations found in this section."
+    reduce_task = f"""Produce a chronological expiry schedule with calculated deadlines across the full document. For franchise agreements, the commencement date is found in the Financial and Other Terms schedule or Annexure A, item labeled 'Commencement Date'. Use this date, not dates from the main body text.
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
 Output ONLY valid JSON matching this exact structure:
 {{
   "document_context": {{
-    "location": "Full property address or premises description",
+    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
     "parties": [
       {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
     ],
@@ -453,7 +453,7 @@ Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause 
 Output ONLY valid JSON matching this exact structure:
 {{
   "document_context": {{
-    "location": "Full property address or premises description",
+    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
     "parties": [
       {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
     ],
@@ -535,7 +535,7 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
     lease_filename = filenames[0] if len(filenames) > 0 else "Lease_Document"
     franchise_filename = filenames[1] if len(filenames) > 1 else "Franchise_Document"
 
-    map_task = "Extract all obligations, restrictions, and operational requirements from this section. Also extract: property location, all party names and roles, and obligations per party."
+    map_task = "Extract all obligations, restrictions, and operational requirements from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., all party names and roles, and obligations per party."
     reduce_task = f"""Cross-reference franchise obligations against lease provisions and list every misalignment found. Flag uncertain matches explicitly.
 Output exactly this JSON structure:
 {{
@@ -544,7 +544,7 @@ Output exactly this JSON structure:
   "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
   "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
   "document_context": {{
-    "location": "Full property address or premises description",
+    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
     "parties": [
       {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
     ],
@@ -588,7 +588,7 @@ Output exactly this JSON structure:
   "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
   "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
   "document_context": {{
-    "location": "Full property address or premises description",
+    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
     "parties": [
       {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
     ],
@@ -664,7 +664,7 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
     "renewal_deadline": "YYYY-MM-DD",
     "key_terms": "1-sentence summary of the most important term or permitted use",
     "flags": "Any major risks, unusual clauses or Management Alerts",
-    "property_location": "Full property address",
+    "property_location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
     "parties": [{{"role": "Landlord/etc", "name": "Entity Name"}}],
     "obligations_summary": {{"financial": "String", "operational": "String"}}
   }}""")
@@ -676,7 +676,7 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
 
     example_json_array = "[\n" + ",\n".join(example_objects) + "\n]"
 
-    map_task = "Extract key financial terms, parties, and material obligations from this section. Also extract: property location, party names, and a summary of financial and operational obligations."
+    map_task = "Extract key financial terms, parties, and material obligations from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., party names, and a summary of financial and operational obligations."
     reduce_task = f"""Produce a portfolio dashboard of key terms across all documents. Flag documents where extraction confidence was low.
 Output exactly this JSON structure as an array of objects:
 {example_json_array}
@@ -793,12 +793,12 @@ async def document_compare(payload, current_user: Optional[models.User] = Depend
 
     full_text = f"--- DOCUMENT A START: {payload.doc_id_a} ---\n{doc_texts[payload.doc_id_a]}\n--- DOCUMENT B START: {payload.doc_id_b} ---\n{doc_texts[payload.doc_id_b]}"
 
-    map_task = "Extract all material terms, obligations, and risk clauses from this section. Retain context of which document this belongs to (Document A or Document B). Also extract: property location and all party names and roles."
+    map_task = "Extract all material terms, obligations, and risk clauses from this section. Retain context of which document this belongs to (Document A or Document B). Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building. and all party names and roles."
     reduce_task = """Produce a forensic redline diff of ADDED, MODIFIED, and DELETED provisions between the two documents. Flag any sections where comparison was limited by content quality.
 JSON SCHEMA REQUIREMENT:
 {{
   "document_context": {{
-    "location": "Full property address or premises description",
+    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
     "parties": [
       {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
     ],
@@ -857,7 +857,7 @@ Ignore cosmetic or stylistic wording changes (like whitespace or font). Focus st
 JSON SCHEMA REQUIREMENT:
 {{
   "document_context": {{
-    "location": "Full property address or premises description",
+    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
     "parties": [
       {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
     ],
