@@ -145,8 +145,10 @@ def delete_workspace(ws_id: str, current_user: Optional[models.User] = Depends(g
             if os.path.exists(cache_file):
                 os.remove(cache_file)
                 
+        db.query(models.NotificationLog).filter(models.NotificationLog.doc_id == doc.id).delete(synchronize_session=False)
         db.delete(doc)
         
+    db.query(models.NotificationConfig).filter(models.NotificationConfig.workspace_id == workspace.id).delete(synchronize_session=False)
     db.flush()
     db.delete(workspace)
     db.commit()
@@ -204,6 +206,9 @@ def delete_document(doc_id: str, current_user: Optional[models.User] = Depends(g
     for cache_file in glob.glob(os.path.join(UPLOAD_DIR, f"{doc.workspace_id}_*.json")):
         if os.path.exists(cache_file):
             os.remove(cache_file)
+
+    # Remove associated notification logs to prevent foreign key errors
+    db.query(models.NotificationLog).filter(models.NotificationLog.doc_id == doc.id).delete(synchronize_session=False)
 
     # Remove the DB record
     db.delete(doc)
