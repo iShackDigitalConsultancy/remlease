@@ -573,11 +573,17 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
-    lease_filename = filenames[0] if len(filenames) > 0 else "Lease_Document"
-    franchise_filename = filenames[1] if len(filenames) > 1 else "Franchise_Document"
+    lease_filename = "Lease_Document"
+    franchise_filename = "Franchise_Document"
+    for fname in filenames:
+        fname_lower = fname.lower()
+        if any(word in fname_lower for word in ["lease", "huur", "agreement of lease"]):
+            lease_filename = fname
+        elif any(word in fname_lower for word in ["franchise", "fa ", "franchisor"]):
+            franchise_filename = fname
 
     map_task = "Extract all obligations, restrictions, and operational requirements from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., all party names and roles, and obligations per party."
-    reduce_task = f"""Cross-reference franchise obligations against lease provisions and list every misalignment found. Flag uncertain matches explicitly.
+    reduce_task = f"""Cross-reference franchise obligations against lease provisions and list every misalignment found. Flag uncertain matches explicitly. Detect which document is the lease and which is the franchise agreement based on content, not just filename order.
 Output exactly this JSON structure:
 {{
   "detected_lease": "{lease_filename}",
