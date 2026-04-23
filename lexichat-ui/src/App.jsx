@@ -2077,7 +2077,7 @@ END:VCALENDAR`;
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Clock className="text-brand-accent" size={18} /> Master Timeline & Cast of Characters
+                <Clock className="text-brand-accent" size={18} /> Fundamental Terms
               </h2>
               <div className="flex items-center gap-3">
                 <button onClick={() => executeTimelineGeneration(true)} disabled={isGeneratingTimeline} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isGeneratingTimeline ? "Extracting..." : "Refresh"}</button>
@@ -2113,52 +2113,141 @@ END:VCALENDAR`;
                        <span className="text-sm font-medium text-slate-700"><strong>Property Location:</strong> {timelineData.document_context.location}</span>
                      </div>
                    )}
-                   <div className="flex-1 overflow-y-auto flex flex-col md:flex-row">
-                      {/* Cast of Characters (Left Pane) */}
-                      <div className="w-full md:w-1/3 border-r border-slate-200 bg-slate-50 p-6 overflow-y-auto">
-                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2">
-                            <Users size={14} className="text-brand-blue" /> Cast of Characters
-                         </h3>
-                         <div className="flex flex-col gap-4">
-                            {timelineData.characters?.map((char, idx) => (
-                              <div key={idx} className="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
-                                 <span className="inline-block px-2 py-0.5 bg-brand-accent/10 border border-brand-accent/20 text-brand-accent text-[10px] font-bold uppercase tracking-wider rounded-md mb-2">{char.role}</span>
-                                 <h4 className="text-sm font-bold text-slate-900 mb-1">{char.name}</h4>
-                                 <p className="text-xs text-slate-600 leading-relaxed">{char.description}</p>
-                              </div>
-                            ))}
-                            {(!timelineData.characters || timelineData.characters.length === 0) && (
-                              <div className="text-center p-6 text-slate-500 text-sm">No specific named entities identified.</div>
-                            )}
-                         </div>
-                      </div>
-                      
-                      {/* Master Timeline (Right Pane) */}
-                      <div className="w-full md:w-2/3 p-8 overflow-y-auto bg-white relative">
-                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-8 flex items-center gap-2">
-                            <Clock size={14} className="text-brand-accent" /> Chronological Event Trace
-                         </h3>
-                         
-                         <div className="relative pl-6 border-l-2 border-brand-accent/30 space-y-8 pb-10">
-                           {timelineData.timeline?.map((event, idx) => (
-                              <div key={idx} className="relative group">
-                                 <div className="absolute w-3.5 h-3.5 rounded-full bg-brand-accent border-4 border-white -left-[31px] top-1 group-hover:scale-125 transition-transform shadow-sm" />
-                                 <div className="flex items-start gap-3 flex-col">
-                                    <div className="flex items-center gap-3">
-                                       <span className="text-xs font-black text-white bg-brand-accent px-2.5 py-1 rounded-md shadow-sm">{event.date}</span>
-                                       <span className="flex items-center gap-1 text-[10px] font-medium text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full"><FileText size={10}/> {event.source}</span>
-                                    </div>
-                                    <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 w-full break-words hover:border-brand-blue/30 transition-colors">
-                                       <p className="text-sm text-slate-800 leading-relaxed font-medium">{event.event}</p>
-                                    </div>
-                                 </div>
-                              </div>
-                           ))}
-                           {(!timelineData.timeline || timelineData.timeline.length === 0) && (
-                              <div className="text-center p-12 text-slate-500 text-sm border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50">No chronological events extracted from these documents.</div>
-                           )}
-                         </div>
-                      </div>
+                   <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-slate-50/50">
+                     
+                     {/* Parties Section */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        {/* Lessor Card */}
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6">
+                          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Building2 size={16} className="text-brand-blue" /> Lessor
+                          </h3>
+                          <div className="space-y-3">
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Name</span><p className="text-sm font-medium text-slate-900">{timelineData.fundamental_terms?.lessor?.name || "N/A"}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Registration</span><p className="text-sm text-slate-700">{timelineData.fundamental_terms?.lessor?.registration || "N/A"}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Representative</span><p className="text-sm text-slate-700">{timelineData.fundamental_terms?.lessor?.representative || "N/A"}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Domicilium</span><p className="text-sm text-slate-700 text-balance">{timelineData.fundamental_terms?.lessor?.domicilium || "N/A"}</p></div>
+                          </div>
+                        </div>
+
+                        {/* Lessee Card */}
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6">
+                          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Users size={16} className="text-brand-accent" /> Lessee
+                          </h3>
+                          <div className="space-y-3">
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Name</span><p className="text-sm font-medium text-slate-900">{timelineData.fundamental_terms?.lessee?.name || "N/A"}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Registration</span><p className="text-sm text-slate-700">{timelineData.fundamental_terms?.lessee?.registration || "N/A"}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Representative</span><p className="text-sm text-slate-700">{timelineData.fundamental_terms?.lessee?.representative || "N/A"}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Domicilium</span><p className="text-sm text-slate-700 text-balance">{timelineData.fundamental_terms?.lessee?.domicilium || "N/A"}</p></div>
+                          </div>
+                        </div>
+                     </div>
+
+                     {/* Premises & Operating Metrics */}
+                     <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6 mb-6">
+                        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3">Premises & Key Metrics</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                           <div><span className="text-[10px] uppercase text-slate-400 font-bold">Description</span><p className="text-sm font-medium text-slate-800">{timelineData.fundamental_terms?.premises?.description || "N/A"}</p></div>
+                           <div><span className="text-[10px] uppercase text-slate-400 font-bold">Address</span><p className="text-sm text-slate-700">{timelineData.fundamental_terms?.premises?.address || "N/A"}</p></div>
+                           <div><span className="text-[10px] uppercase text-slate-400 font-bold">ERF</span><p className="text-sm text-slate-700">{timelineData.fundamental_terms?.premises?.erf || "N/A"}</p></div>
+                           
+                           <div className="lg:col-span-3 pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-6">
+                             <div><span className="text-[10px] uppercase text-slate-400 font-bold">Permitted Use</span><p className="text-sm text-slate-800 border-l-2 border-brand-accent pl-3 mt-1 py-1">{timelineData.fundamental_terms?.permitted_use || "N/A"}</p></div>
+                             <div><span className="text-[10px] uppercase text-slate-400 font-bold">Trading Hours</span>
+                                 <ul className="text-xs text-slate-700 mt-1 space-y-1">
+                                    <li><span className="font-medium">Mon-Thu:</span> {timelineData.fundamental_terms?.trading_hours?.monday_thursday || "N/A"}</li>
+                                    <li><span className="font-medium">Friday:</span> {timelineData.fundamental_terms?.trading_hours?.friday || "N/A"}</li>
+                                    <li><span className="font-medium">Saturday:</span> {timelineData.fundamental_terms?.trading_hours?.saturday || "N/A"}</li>
+                                    <li><span className="font-medium">Sun/PH:</span> {timelineData.fundamental_terms?.trading_hours?.sunday_public_holidays || "N/A"}</li>
+                                 </ul>
+                             </div>
+                             <div><span className="text-[10px] uppercase text-slate-400 font-bold">Security Deposit</span><p className="text-sm font-bold text-amber-600 bg-amber-50 px-3 py-2 rounded-lg mt-1 border border-amber-200">{timelineData.fundamental_terms?.security_deposit || "N/A"}</p></div>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* Financial & Timeframe Grid */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        {/* Critical Dates */}
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6">
+                          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Clock size={16} className="text-emerald-500" /> Critical Dates
+                          </h3>
+                          <div className="space-y-4">
+                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Lease Period</span><span className="text-sm font-bold text-slate-800">{timelineData.fundamental_terms?.lease_period || "N/A"}</span></div>
+                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Commencement</span><span className="text-sm font-medium text-slate-800">{timelineData.fundamental_terms?.commencement_date || "N/A"}</span></div>
+                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Expiry Date</span><span className="text-sm font-bold text-rose-600">{timelineData.fundamental_terms?.expiry_date || "N/A"}</span></div>
+                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Beneficial Occupation</span><span className="text-sm font-medium text-slate-800">{timelineData.fundamental_terms?.beneficial_occupation_date || "N/A"}</span></div>
+                            <div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-500 uppercase">Renewal Option</span><span className="text-sm font-medium text-brand-blue bg-brand-blue/10 px-2 py-0.5 rounded">{timelineData.fundamental_terms?.renewal_option || "None"}</span></div>
+                          </div>
+                        </div>
+
+                        {/* Payment & Escalation */}
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6">
+                          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Database size={16} className="text-indigo-500" /> Financial Details
+                          </h3>
+                          <div className="space-y-4 mb-6">
+                            <div className="flex justify-between items-center pb-2 border-b border-slate-50"><span className="text-[11px] font-bold text-slate-500 uppercase">Escalation Rate</span><span className="text-sm font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{timelineData.fundamental_terms?.escalation_rate || "N/A"}</span></div>
+                            <div className="flex justify-between items-center pb-2 border-b border-slate-50"><span className="text-[11px] font-bold text-slate-500 uppercase">Suretyship</span><span className="text-sm font-medium text-slate-700">{timelineData.fundamental_terms?.suretyship || "None specified"}</span></div>
+                          </div>
+                          
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                             <span className="block text-[10px] uppercase font-bold text-slate-400 mb-2">Banking Details</span>
+                             <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div><span className="text-slate-500">Bank:</span> <span className="font-medium">{timelineData.fundamental_terms?.payment_details?.bank || "N/A"}</span></div>
+                                <div><span className="text-slate-500">Branch:</span> <span className="font-medium">{timelineData.fundamental_terms?.payment_details?.branch || "N/A"}</span></div>
+                                <div><span className="text-slate-500">Account:</span> <span className="font-medium">{timelineData.fundamental_terms?.payment_details?.account_number || "N/A"}</span></div>
+                                <div><span className="text-slate-500">Type:</span> <span className="font-medium">{timelineData.fundamental_terms?.payment_details?.account_type || "N/A"}</span></div>
+                             </div>
+                          </div>
+                        </div>
+                     </div>
+
+                     {/* Rental Schedule Table */}
+                     {timelineData.fundamental_terms?.rental_schedule && timelineData.fundamental_terms.rental_schedule.length > 0 && (
+                       <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden mb-6">
+                          <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+                             <h3 className="text-xs font-bold text-slate-600 uppercase tracking-widest">Rental Schedule</h3>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left">
+                               <thead className="bg-slate-50/50 text-xs uppercase text-slate-500 font-bold border-b border-slate-100">
+                                  <tr>
+                                     <th className="px-6 py-3 whitespace-nowrap">Period</th>
+                                     <th className="px-6 py-3 whitespace-nowrap">Monthly Amount</th>
+                                     <th className="px-6 py-3 w-full">Notes</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                   {timelineData.fundamental_terms.rental_schedule.map((rent, i) => (
+                                      <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                         <td className="px-6 py-3 font-medium text-slate-700 whitespace-nowrap">{rent.period || "N/A"}</td>
+                                         <td className="px-6 py-3 font-bold text-emerald-700 whitespace-nowrap">{rent.amount || "N/A"}</td>
+                                         <td className="px-6 py-3 text-slate-500 text-xs">{rent.note || "-"}</td>
+                                      </tr>
+                                   ))}
+                                </tbody>
+                            </table>
+                          </div>
+                       </div>
+                     )}
+
+                     {/* Special Conditions */}
+                     {timelineData.fundamental_terms?.special_conditions && timelineData.fundamental_terms.special_conditions.length > 0 && (
+                       <div className="bg-rose-50/50 border border-rose-100 shadow-sm rounded-2xl p-6 mb-6">
+                          <h3 className="text-xs font-bold text-rose-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                             <ShieldAlert size={16} /> Special Conditions
+                          </h3>
+                          <ul className="list-disc pl-5 space-y-2 text-sm text-slate-800">
+                             {timelineData.fundamental_terms.special_conditions.map((cond, i) => (
+                               <li key={i} className="leading-relaxed">{cond}</li>
+                             ))}
+                          </ul>
+                       </div>
+                     )}
+                     
                    </div>
                  </div>
               ) : (
