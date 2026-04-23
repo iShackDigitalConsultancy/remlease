@@ -463,7 +463,12 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
 )
 
     map_task = "Extract all dates, terms, deadlines, and renewal notice periods from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., all party names and roles, and any material obligations found in this section."
-    reduce_task = f"""Produce a chronological expiry schedule with calculated deadlines across ALL documents provided — produce one expiry entry per document. For franchise agreements, the commencement date is found in the Financial and Other Terms schedule or Annexure A, item labeled 'Commencement Date'. Use this date, not dates from the main body text.
+    reduce_task = f"""You MUST produce a SEPARATE expiry entry for EACH document marked with --- DOCUMENT START ---.
+Do NOT copy or duplicate dates across entries.
+Each document has different dates:
+- For a FRANCHISE AGREEMENT: commencement date is in Annexure A item 7, expiry = commencement plus duration from item 8
+- For a LEASE AGREEMENT: commencement is in clause 3.1 or the schedule, expiry in clause 3.2
+These dates WILL be different. Produce one object per document in the expiries array.
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
 Output ONLY valid JSON matching this exact structure:
 {{

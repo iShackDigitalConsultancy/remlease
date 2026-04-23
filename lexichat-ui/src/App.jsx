@@ -57,6 +57,28 @@ function InnerApp() {
     return String(val);
   }
 
+  const generateICS = (expiry) => {
+    const date = expiry.expiry_date?.replace(/-/g,'') || '';
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      `DTSTART:${date}`,
+      `DTEND:${date}`,
+      `SUMMARY:Lease Expiry - ${expiry.document}`,
+      `DESCRIPTION:${expiry.action_required || ''}`,
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+    const blob = new Blob([ics], {type: 'text/calendar'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lease_expiry.ics';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const { token, user, logout, sessionId } = useAuth();
   const navigate = useNavigate();
 
@@ -1870,6 +1892,21 @@ END:VCALENDAR`;
                                className="text-[10px] mt-1 ml-7 flex w-max items-center gap-1 bg-brand-blue/5 hover:bg-brand-blue/15 text-brand-blue py-1 px-2 rounded transition-colors"
                              >
                                 <Download size={10} /> Download Source PDF
+                             </button>
+                           </div>
+                           
+                           <div className="flex flex-wrap md:flex-nowrap items-center gap-2">
+                             <button
+                               onClick={() => generateICS(exp)}
+                               className="text-xs flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                             >
+                               <CalendarPlus size={12} /> Add to Calendar
+                             </button>
+                             <button
+                               onClick={() => alert('SmartBuilding API integration coming soon')}
+                               className="text-xs flex items-center gap-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                             >
+                               <Database size={12} /> Push to SmartBuilding
                              </button>
                            </div>
                         </div>
