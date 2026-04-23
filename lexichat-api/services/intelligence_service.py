@@ -137,25 +137,43 @@ async def document_audit(payload, current_user: Optional[models.User] = Depends(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read local document: {str(e)}")
 
-    map_task = f"Extract all policy clauses, compliance obligations, and risk provisions from this section."
+    map_task = f"Extract all policy clauses, compliance obligations, and risk provisions from this section. Also extract: property location, parties, and any compliance obligations per party."
     reduce_task = f"""Produce a structured audit report flagging all compliance risks and policy gaps against this strictly provided policy:
 {payload.policy}
 
 Deduplicate identical violations found across different sections.
 Output ONLY valid JSON matching this exact array structure:
-[
-  {{
-    "check": "Rule 1 from the policy",
-    "status": "PASS", 
-    "explanation": "Brief explanation of why it passed, quoting the text if possible."
+{{
+  "document_context": {{
+    "location": "Full property address or premises description",
+    "parties": [
+      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
+    ],
+    "obligations": [
+      {{
+        "party": "Party name",
+        "category": "Financial | Operational | Maintenance | Compliance",
+        "obligation": "Description of the obligation",
+        "clause_reference": "e.g. 4.2.3 or Schedule 1"
+      }}
+    ]
   }},
-  {{
-    "check": "Rule 2 from the policy",
-    "status": "FAIL", 
-    "explanation": "Explanation of why it failed or is missing."
-  }}
-]
-Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON array."""
+  "audit": [
+    {{
+      "check": "Rule 1 from the policy",
+      "status": "PASS", 
+      "explanation": "Brief explanation of why it passed, quoting the text if possible.",
+      "clause_reference": "e.g. 1.2"
+    }},
+    {{
+      "check": "Rule 2 from the policy",
+      "status": "FAIL", 
+      "explanation": "Explanation of why it failed or is missing.",
+      "clause_reference": "e.g. 1.2"
+    }}
+  ]
+}}
+Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON object."""
 
     def legacy_op():
         doc_text = str(full_text)[:18000]
@@ -169,21 +187,39 @@ DOCUMENT TEXT:
 
 INSTRUCTIONS:
 Evaluate the document strictly against the policy above. 
-Output ONLY valid JSON matching this exact array structure:
-[
-  {{
-    "check": "Rule 1 from the policy",
-    "status": "PASS", 
-    "explanation": "Brief explanation of why it passed, quoting the text if possible."
+Output ONLY valid JSON matching this exact structure:
+{{
+  "document_context": {{
+    "location": "Full property address or premises description",
+    "parties": [
+      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
+    ],
+    "obligations": [
+      {{
+        "party": "Party name",
+        "category": "Financial | Operational | Maintenance | Compliance",
+        "obligation": "Description of the obligation",
+        "clause_reference": "e.g. 4.2.3 or Schedule 1"
+      }}
+    ]
   }},
-  {{
-    "check": "Rule 2 from the policy",
-    "status": "FAIL", 
-    "explanation": "Explanation of why it failed or is missing."
-  }}
-]
+  "audit": [
+    {{
+      "check": "Rule 1 from the policy",
+      "status": "PASS", 
+      "explanation": "Brief explanation of why it passed, quoting the text if possible.",
+      "clause_reference": "e.g. 1.2"
+    }},
+    {{
+      "check": "Rule 2 from the policy",
+      "status": "FAIL", 
+      "explanation": "Explanation of why it failed or is missing.",
+      "clause_reference": "e.g. 1.2"
+    }}
+  ]
+}}
 
-Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON array."""
+Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON object."""
         resp = groq_client.chat.completions.create(
             model='llama-3.3-70b-versatile',
             messages=[{'role': 'user', 'content': prompt}],
@@ -192,7 +228,7 @@ Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON arra
         )
         raw = resp.choices[0].message.content.strip()
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
-        return {"audit": json.loads(raw)}
+        return json.loads(raw)
 
     workspace_id = doc.workspace_id
     cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_audit.json")
@@ -232,26 +268,51 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
-    map_task = "Extract all dated events, milestones, and party obligations from this section."
+    map_task = "Extract all dated events, milestones, and party obligations from this section. Also extract: property location and any party obligations associated with each event."
     reduce_task = """Produce a chronological timeline of all events across the full document.
 JSON SCHEMA REQUIREMENT:
-{
-  "characters": [
-    {
-      "name": "Jane Doe",
-      "role": "Plaintiff",
-      "description": "Former employee of the company..."
-    }
-  ],
-  "timeline": [
-    {
-      "date": "2023-01-15",
-      "event": "Employment Contract Signed",
-      "source": "contract.pdf"
-    }
+{{
+  "document_context": {{
+    "location": "Full property address or premises description",
+    "parties": [
+      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
+    ],
+    "obligations": [
+      {{
+        "party": "Party name",
+        "category": "Financial | Operational | Maintenance | Compliance",
+        "obligation": "Description of the obligation",
+        "clause_reference": "e.g. 4.2.3 or Schedule 1"
+      }}
+    ]
+  }},
+  "risk_summary": "A 2-3 sentence executive summary explaining how the risk profile has shifted from Document A to Document B.",
+  "changes": [
+    {{
+      "type": "ADDED",
+      "original_text": null,
+      "new_text": "Exact text added to Document B",
+      "impact": "High/Med/Low impact: Short explanation of legal implication.",
+      "clause_reference": "e.g. 4.2"
+    }},
+    {{
+      "type": "DELETED",
+      "original_text": "Exact text removed from Document A",
+      "new_text": null,
+      "impact": "High/Med/Low impact: Short explanation of legal implication.",
+      "clause_reference": "e.g. 4.2"
+    }},
+    {{
+      "type": "MODIFIED",
+      "original_text": "Exact original clause in Document A",
+      "new_text": "Exact new clause in Document B",
+      "impact": "High/Med/Low impact: Short explanation of how the modification shifts obligation.",
+      "clause_reference": "e.g. 4.2"
+    }}
   ]
-}
-If a date is vague, express it as roughly as possible inside the date field. Make sure the timeline array chronologically ordered from oldest to newest. Return ONLY the raw JSON object."""
+}}
+
+Return ONLY the raw JSON object."""
 
     def legacy_op():
         old_full_text = str(full_text)[:18000]
@@ -335,11 +396,25 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
 
     example_filename = filenames[0] if filenames else "contract.pdf"
 
-    map_task = "Extract all dates, terms, deadlines, and renewal notice periods from this section."
+    map_task = "Extract all dates, terms, deadlines, and renewal notice periods from this section. Also extract: the physical property address or premises description, all party names and roles, and any material obligations found in this section."
     reduce_task = f"""Produce a chronological expiry schedule with calculated deadlines across the full document.
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
 Output ONLY valid JSON matching this exact structure:
 {{
+  "document_context": {{
+    "location": "Full property address or premises description",
+    "parties": [
+      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
+    ],
+    "obligations": [
+      {{
+        "party": "Party name",
+        "category": "Financial | Operational | Maintenance | Compliance",
+        "obligation": "Description of the obligation",
+        "clause_reference": "e.g. 4.2.3 or Schedule 1"
+      }}
+    ]
+  }},
   "expiries": [
     {{
       "document": "{example_filename}",
@@ -347,6 +422,7 @@ Output ONLY valid JSON matching this exact structure:
       "expiry_date": "YYYY-MM-DD",
       "renewal_deadline": "YYYY-MM-DD",
       "clause": "Text of the clause governing renewal/termination",
+      "clause_reference": "e.g. 12.1",
       "action_required": "Short description of what must happen"
     }}
   ]
@@ -364,6 +440,20 @@ INSTRUCTIONS:
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
 Output ONLY valid JSON matching this exact structure:
 {{
+  "document_context": {{
+    "location": "Full property address or premises description",
+    "parties": [
+      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
+    ],
+    "obligations": [
+      {{
+        "party": "Party name",
+        "category": "Financial | Operational | Maintenance | Compliance",
+        "obligation": "Description of the obligation",
+        "clause_reference": "e.g. 4.2.3 or Schedule 1"
+      }}
+    ]
+  }},
   "expiries": [
     {{
       "document": "{example_filename}",
@@ -371,6 +461,7 @@ Output ONLY valid JSON matching this exact structure:
       "expiry_date": "YYYY-MM-DD" (EXTREMELY IMPORTANT: If missing, you MUST CALCULATE it by finding 'Commencement Date' or 'Signature Date' and adding 'Duration'/'Term'. E.g. start=2023-01-01 + duration 5 years = 2028-01-01),
       "renewal_deadline": "YYYY-MM-DD" (Calculate from expiry date minus notice period if applicable),
       "clause": "Text of the clause governing renewal/termination",
+      "clause_reference": "e.g. 12.1",
       "action_required": "Short description of what must happen"
     }}
   ]
@@ -432,7 +523,7 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
     lease_filename = filenames[0] if len(filenames) > 0 else "Lease_Document"
     franchise_filename = filenames[1] if len(filenames) > 1 else "Franchise_Document"
 
-    map_task = "Extract all obligations, restrictions, and operational requirements from this section."
+    map_task = "Extract all obligations, restrictions, and operational requirements from this section. Also extract: property location, all party names and roles, and obligations per party."
     reduce_task = f"""Cross-reference franchise obligations against lease provisions and list every misalignment found. Flag uncertain matches explicitly.
 Output exactly this JSON structure:
 {{
@@ -440,15 +531,32 @@ Output exactly this JSON structure:
   "detected_franchise": "{franchise_filename}",
   "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
   "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
+  "document_context": {{
+    "location": "Full property address or premises description",
+    "parties": [
+      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
+    ],
+    "obligations": [
+      {{
+        "party": "Party name",
+        "category": "Financial | Operational | Maintenance | Compliance",
+        "obligation": "Description of the obligation",
+        "clause_reference": "e.g. 4.2.3 or Schedule 1"
+      }}
+    ]
+  }},
   "gaps": [
     {{
       "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
       "franchise_requirement": "What does the franchise demand?",
       "lease_provision": "What does the lease actually say?",
-      "status": "RISK" or "MATCH" or "WARNING"
+      "status": "RISK" or "MATCH" or "WARNING",
+      "clause_reference_lease": "e.g. 4.2",
+      "clause_reference_franchise": "e.g. 5.1"
     }}
   ]
 }}
+
 If only one document type is uploaded, map whatever you can and put 'null' for the missing one. Return ONLY valid JSON."""
 
     def legacy_op():
@@ -467,12 +575,28 @@ Output exactly this JSON structure:
   "detected_franchise": "{franchise_filename}",
   "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
   "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
+  "document_context": {{
+    "location": "Full property address or premises description",
+    "parties": [
+      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
+    ],
+    "obligations": [
+      {{
+        "party": "Party name",
+        "category": "Financial | Operational | Maintenance | Compliance",
+        "obligation": "Description of the obligation",
+        "clause_reference": "e.g. 4.2.3 or Schedule 1"
+      }}
+    ]
+  }},
   "gaps": [
     {{
       "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
       "franchise_requirement": "What does the franchise demand?",
       "lease_provision": "What does the lease actually say?",
-      "status": "RISK" or "MATCH" or "WARNING"
+      "status": "RISK" or "MATCH" or "WARNING",
+      "clause_reference_lease": "e.g. 4.2",
+      "clause_reference_franchise": "e.g. 5.1"
     }}
   ]
 }}
@@ -527,7 +651,10 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
     "expiry_date": "YYYY-MM-DD",
     "renewal_deadline": "YYYY-MM-DD",
     "key_terms": "1-sentence summary of the most important term or permitted use",
-    "flags": "Any major risks, unusual clauses or Management Alerts"
+    "flags": "Any major risks, unusual clauses or Management Alerts",
+    "property_location": "Full property address",
+    "parties": [{{"role": "Landlord/etc", "name": "Entity Name"}}],
+    "obligations_summary": {{"financial": "String", "operational": "String"}}
   }}""")
             except Exception as e:
                 pass
@@ -537,7 +664,7 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
 
     example_json_array = "[\n" + ",\n".join(example_objects) + "\n]"
 
-    map_task = "Extract key financial terms, parties, and material obligations from this section."
+    map_task = "Extract key financial terms, parties, and material obligations from this section. Also extract: property location, party names, and a summary of financial and operational obligations."
     reduce_task = f"""Produce a portfolio dashboard of key terms across all documents. Flag documents where extraction confidence was low.
 Output exactly this JSON structure as an array of objects:
 {example_json_array}
@@ -654,32 +781,50 @@ async def document_compare(payload, current_user: Optional[models.User] = Depend
 
     full_text = f"--- DOCUMENT A START: {payload.doc_id_a} ---\n{doc_texts[payload.doc_id_a]}\n--- DOCUMENT B START: {payload.doc_id_b} ---\n{doc_texts[payload.doc_id_b]}"
 
-    map_task = "Extract all material terms, obligations, and risk clauses from this section. Retain context of which document this belongs to (Document A or Document B)."
+    map_task = "Extract all material terms, obligations, and risk clauses from this section. Retain context of which document this belongs to (Document A or Document B). Also extract: property location and all party names and roles."
     reduce_task = """Produce a forensic redline diff of ADDED, MODIFIED, and DELETED provisions between the two documents. Flag any sections where comparison was limited by content quality.
 JSON SCHEMA REQUIREMENT:
-{
+{{
+  "document_context": {{
+    "location": "Full property address or premises description",
+    "parties": [
+      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
+    ],
+    "obligations": [
+      {{
+        "party": "Party name",
+        "category": "Financial | Operational | Maintenance | Compliance",
+        "obligation": "Description of the obligation",
+        "clause_reference": "e.g. 4.2.3 or Schedule 1"
+      }}
+    ]
+  }},
   "risk_summary": "A 2-3 sentence executive summary explaining how the risk profile has shifted from Document A to Document B.",
   "changes": [
-    {
+    {{
       "type": "ADDED",
       "original_text": null,
       "new_text": "Exact text added to Document B",
-      "impact": "High/Med/Low impact: Short explanation of legal implication."
-    },
-    {
+      "impact": "High/Med/Low impact: Short explanation of legal implication.",
+      "clause_reference": "e.g. 4.2"
+    }},
+    {{
       "type": "DELETED",
       "original_text": "Exact text removed from Document A",
       "new_text": null,
-      "impact": "High/Med/Low impact: Short explanation of legal implication."
-    },
-    {
+      "impact": "High/Med/Low impact: Short explanation of legal implication.",
+      "clause_reference": "e.g. 4.2"
+    }},
+    {{
       "type": "MODIFIED",
       "original_text": "Exact original clause in Document A",
       "new_text": "Exact new clause in Document B",
-      "impact": "High/Med/Low impact: Short explanation of how the modification shifts obligation."
-    }
+      "impact": "High/Med/Low impact: Short explanation of how the modification shifts obligation.",
+      "clause_reference": "e.g. 4.2"
+    }}
   ]
-}
+}}
+
 Return ONLY the raw JSON object."""
 
     def legacy_op():
@@ -699,25 +844,42 @@ Ignore cosmetic or stylistic wording changes (like whitespace or font). Focus st
 
 JSON SCHEMA REQUIREMENT:
 {{
+  "document_context": {{
+    "location": "Full property address or premises description",
+    "parties": [
+      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
+    ],
+    "obligations": [
+      {{
+        "party": "Party name",
+        "category": "Financial | Operational | Maintenance | Compliance",
+        "obligation": "Description of the obligation",
+        "clause_reference": "e.g. 4.2.3 or Schedule 1"
+      }}
+    ]
+  }},
   "risk_summary": "A 2-3 sentence executive summary explaining how the risk profile has shifted from Document A to Document B.",
   "changes": [
     {{
       "type": "ADDED",
       "original_text": null,
       "new_text": "Exact text added to Document B",
-      "impact": "High/Med/Low impact: Short explanation of legal implication."
+      "impact": "High/Med/Low impact: Short explanation of legal implication.",
+      "clause_reference": "e.g. 4.2"
     }},
     {{
       "type": "DELETED",
       "original_text": "Exact text removed from Document A",
       "new_text": null,
-      "impact": "High/Med/Low impact: Short explanation of legal implication."
+      "impact": "High/Med/Low impact: Short explanation of legal implication.",
+      "clause_reference": "e.g. 4.2"
     }},
     {{
       "type": "MODIFIED",
       "original_text": "Exact original clause in Document A",
       "new_text": "Exact new clause in Document B",
-      "impact": "High/Med/Low impact: Short explanation of how the modification shifts obligation."
+      "impact": "High/Med/Low impact: Short explanation of how the modification shifts obligation.",
+      "clause_reference": "e.g. 4.2"
     }}
   ]
 }}

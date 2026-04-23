@@ -1,4 +1,6 @@
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime
+import uuid
+
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -38,6 +40,7 @@ class Workspace(Base):
 
     firm = relationship("Firm", back_populates="workspaces")
     documents = relationship("WorkspaceDocument", back_populates="workspace", cascade="all, delete-orphan")
+    notification_config = relationship("NotificationConfig", uselist=False, back_populates="workspace", cascade="all, delete-orphan")
 
 class AnonymousSession(Base):
     __tablename__ = "anonymous_sessions"
@@ -56,3 +59,27 @@ class WorkspaceDocument(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     workspace = relationship("Workspace", back_populates="documents")
+
+class NotificationConfig(Base):
+    __tablename__ = "notification_configs"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    workspace_id = Column(String, ForeignKey("workspaces.id"), unique=True, nullable=False)
+    is_enabled = Column(Boolean, default=True)
+    thresholds_days = Column(String, default="180,90,30")
+    landlord_email = Column(String, nullable=True)
+    franchisee_email = Column(String, nullable=True)
+    franchisor_email = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    workspace = relationship("Workspace", back_populates="notification_config")
+
+class NotificationLog(Base):
+    __tablename__ = "notification_logs"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    doc_id = Column(String, ForeignKey("workspace_documents.id"))
+    threshold_days = Column(Integer)
+    sent_at = Column(DateTime, default=datetime.datetime.utcnow)
+    recipient_email = Column(String)
+    status = Column(String, default="success")
+    
+    document = relationship("WorkspaceDocument")

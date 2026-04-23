@@ -2,7 +2,9 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Depends, sta
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
+from services import notification_service
+import os, EmailStr
 from typing import List, Optional
 from dotenv import load_dotenv
 load_dotenv()
@@ -222,3 +224,27 @@ def reset_pinecone_admin(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+class NotificationConfigRequest(BaseModel):
+    is_enabled: bool
+    thresholds_days: str
+    landlord_email: Optional[str] = None
+    franchisee_email: Optional[str] = None
+    franchisor_email: Optional[str] = None
+
+@app.get("/api/workspaces/{workspace_id}/notifications")
+def get_notifications(workspace_id: str, current_user: Optional[models.User] = Depends(get_current_user_optional), db: Session = Depends(get_db)):
+    return notification_service.get_notification_config(workspace_id, db)
+
+@app.put("/api/workspaces/{workspace_id}/notifications")
+def update_notifications(workspace_id: str, payload: NotificationConfigRequest, current_user: Optional[models.User] = Depends(get_current_user_optional), db: Session = Depends(get_db)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return notification_service.update_notification_config(workspace_id, payload, db)
+
+@app.post("/api/cron/trigger-expiry-alerts")
+def trigger_expiry_alerts(x_cron_secret: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    expected_secret = os.environ.get("CRON_SECRET")
+    if not expected_secret or x_cron_secret != expected_secret:
+        raise HTTPException(status_code=403, detail="Forbidden cron access")
+    return notification_service.trigger_expiry_alerts(db)
