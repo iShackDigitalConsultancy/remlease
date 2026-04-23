@@ -268,7 +268,7 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
-    map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, payment/banking details, renewal options, special conditions, and suretyship details. If the document uses a PREAMBLE or numbered clause format instead of a schedule table, extract the same information from those sections. Look for LESSOR/LESSEE definitions, PREMISES description in clause 1, COMMENCEMENT DATE in clause 3, EXPIRY DATE in clause 3, BASIC MONTHLY RENTAL in clause 4 tables, DEPOSITS in clause 8, SPECIAL CONDITIONS in clause 16."
+    map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, payment/banking details, renewal options, special conditions, and suretyship details. If the document uses a PREAMBLE or numbered clause format instead of a schedule table, extract the same information from those sections. Look for LESSOR/LESSEE definitions, PREMISES description in clause 1, COMMENCEMENT DATE in clause 3, EXPIRY DATE in clause 3, BASIC MONTHLY RENTAL in clause 4 tables, DEPOSITS in clause 8, SPECIAL CONDITIONS in clause 16. If this is a franchise agreement, also extract: commencement date from Annexure A Financial and Other Terms item 7, duration from item 8, upfront license fee from item 1, monthly franchise fee from item 2."
     reduce_task = """Produce a comprehensive summary of all fundamental lease terms.
 JSON SCHEMA REQUIREMENT:
 {{
@@ -318,9 +318,20 @@ JSON SCHEMA REQUIREMENT:
       "account_type": "string"
     }},
     "special_conditions": ["string array"],
-    "suretyship": "string or null"
+    "suretyship": "string or null",
+    "franchise_terms": {{
+      "commencement_date": "YYYY-MM-DD or null",
+      "expiry_date": "YYYY-MM-DD or null",
+      "term_length": "string or null",
+      "renewal_option": "string or null",
+      "upfront_license_fee": "string or null",
+      "monthly_franchise_fee": "string or null"
+    }}
   }}
 }}
+
+If this is a lease agreement only, set all franchise_terms fields to null.
+If this is a franchise agreement, extract commencement date from Annexure A item 7, duration from item 8, upfront license fee from item 1, monthly fee from item 2.
 
 Return ONLY the raw JSON object."""
 
@@ -350,9 +361,20 @@ Output ONLY valid JSON matching this exact structure:
     "trading_hours": {{ "monday_thursday": "string", "friday": "string", "saturday": "string", "sunday_public_holidays": "string" }},
     "payment_details": {{ "bank": "string", "branch": "string", "account_number": "string", "account_type": "string" }},
     "special_conditions": ["string array"],
-    "suretyship": "string or null"
+    "suretyship": "string or null",
+    "franchise_terms": {{
+      "commencement_date": "YYYY-MM-DD or null",
+      "expiry_date": "YYYY-MM-DD or null",
+      "term_length": "string or null",
+      "renewal_option": "string or null",
+      "upfront_license_fee": "string or null",
+      "monthly_franchise_fee": "string or null"
+    }}
   }}
 }}
+
+If this is a lease agreement only, set all franchise_terms fields to null.
+If this is a franchise agreement, extract commencement date from Annexure A item 7, duration from item 8, upfront license fee from item 1, monthly fee from item 2.
 
 Return ONLY the raw JSON object."""
         resp = groq_client.chat.completions.create(
@@ -406,10 +428,29 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
-    example_filename = filenames[0] if filenames else "contract.pdf"
+    example_expiries = ",\n    ".join([
+    '{\n      "document": "' + fname + '",\n'
+    '      "commencement_date": "YYYY-MM-DD",\n'
+    '      "expiry_date": "YYYY-MM-DD",\n'
+    '      "renewal_deadline": "YYYY-MM-DD",\n'
+    '      "clause": "Governing clause text",\n'
+    '      "clause_reference": "e.g. 12.1",\n'
+    '      "action_required": "What must happen"\n'
+    '    }'
+    for fname in filenames
+]) if filenames else (
+    '{\n      "document": "contract.pdf",\n'
+    '      "commencement_date": "YYYY-MM-DD",\n'
+    '      "expiry_date": "YYYY-MM-DD",\n'
+    '      "renewal_deadline": "YYYY-MM-DD",\n'
+    '      "clause": "Governing clause text",\n'
+    '      "clause_reference": "e.g. 12.1",\n'
+    '      "action_required": "What must happen"\n'
+    '    }'
+)
 
     map_task = "Extract all dates, terms, deadlines, and renewal notice periods from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., all party names and roles, and any material obligations found in this section."
-    reduce_task = f"""Produce a chronological expiry schedule with calculated deadlines across the full document. For franchise agreements, the commencement date is found in the Financial and Other Terms schedule or Annexure A, item labeled 'Commencement Date'. Use this date, not dates from the main body text.
+    reduce_task = f"""Produce a chronological expiry schedule with calculated deadlines across ALL documents provided — produce one expiry entry per document. For franchise agreements, the commencement date is found in the Financial and Other Terms schedule or Annexure A, item labeled 'Commencement Date'. Use this date, not dates from the main body text.
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
 Output ONLY valid JSON matching this exact structure:
 {{

@@ -2254,6 +2254,76 @@ END:VCALENDAR`;
                           </ul>
                        </div>
                      )}
+
+{timelineData.fundamental_terms?.franchise_terms?.
+  commencement_date && 
+  timelineData.fundamental_terms.franchise_terms
+  .commencement_date !== 'null' && (
+  <div className="bg-blue-50 border border-blue-100 
+    shadow-sm rounded-2xl p-6">
+    <h3 className="text-xs font-bold text-blue-800 
+      uppercase tracking-widest mb-4 flex 
+      items-center gap-2">
+      <FileText size={16} /> Franchise Agreement Terms
+    </h3>
+    <div className="grid grid-cols-2 md:grid-cols-3 
+      gap-4">
+      <div>
+        <span className="text-[10px] uppercase 
+          text-slate-400 font-bold block mb-1">
+          Commencement</span>
+        <p className="text-sm font-medium">
+          {safeStr(timelineData.fundamental_terms
+          .franchise_terms.commencement_date)}</p>
+      </div>
+      <div>
+        <span className="text-[10px] uppercase 
+          text-slate-400 font-bold block mb-1">
+          Expiry Date</span>
+        <p className="text-sm font-bold 
+          text-rose-600">
+          {safeStr(timelineData.fundamental_terms
+          .franchise_terms.expiry_date)}</p>
+      </div>
+      <div>
+        <span className="text-[10px] uppercase 
+          text-slate-400 font-bold block mb-1">
+          Term Length</span>
+        <p className="text-sm">
+          {safeStr(timelineData.fundamental_terms
+          .franchise_terms.term_length)}</p>
+      </div>
+      <div>
+        <span className="text-[10px] uppercase 
+          text-slate-400 font-bold block mb-1">
+          Renewal Option</span>
+        <p className="text-sm">
+          {safeStr(timelineData.fundamental_terms
+          .franchise_terms.renewal_option)}</p>
+      </div>
+      <div>
+        <span className="text-[10px] uppercase 
+          text-slate-400 font-bold block mb-1">
+          Upfront Fee</span>
+        <p className="text-sm font-medium 
+          text-emerald-700">
+          {safeStr(timelineData.fundamental_terms
+          .franchise_terms.upfront_license_fee)}
+        </p>
+      </div>
+      <div>
+        <span className="text-[10px] uppercase 
+          text-slate-400 font-bold block mb-1">
+          Monthly Fee</span>
+        <p className="text-sm font-medium 
+          text-emerald-700">
+          {safeStr(timelineData.fundamental_terms
+          .franchise_terms.monthly_franchise_fee)}
+        </p>
+      </div>
+    </div>
+  </div>
+)}
                      
                    </div>
                  </div>
