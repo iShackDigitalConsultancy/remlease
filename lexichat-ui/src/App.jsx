@@ -172,10 +172,6 @@ function InnerApp() {
   }, [activeView, portfolioData, fetchPortfolioOverview]);
 
 
-  // Gap Analysis Feature State
-  const [showGapModal, setShowGapModal] = useState(false);
-  const [gapReportData, setGapReportData] = useState(null);
-  const [isRunningGapAnalysis, setIsRunningGapAnalysis] = useState(false);
 
   // Timeline Feature State
   const [showTimelineModal, setShowTimelineModal] = useState(false);
@@ -642,58 +638,6 @@ function InnerApp() {
     }
   };
 
-  const executeGapAnalysis = async (forceRefresh = false) => {
-    const activeDocIds = library.map(d => d.id);
-    if (activeDocIds.length < 2) return alert("Please upload at least TWO documents (a Lease and a Franchise Agreement) to run Gap Analysis.");
-    
-    setIsRunningGapAnalysis(true);
-    setShowGapModal(true);
-    setGapReportData(null);
-    setPipelineProgress("");
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      else if (sessionId) headers['x-session-id'] = sessionId;
-      const res = await fetch(`${API_BASE}/gap-analysis`, { 
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ 
-          doc_ids: activeDocIds,
-          force_refresh: forceRefresh
-        })
-      });
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = '';
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-             try {
-               const data = JSON.parse(line.slice(6));
-               if (data.status === 'processing') {
-                   setPipelineProgress(data.message);
-               } else if (data.status === 'complete') {
-                   setGapReportData(data.data);
-               } else if (data.status === 'error') {
-                   throw new Error(data.message);
-               }
-             } catch(e) {}
-          }
-        }
-      }
-    } catch (err) {
-      alert("Failed to run gap analysis.");
-      setShowGapModal(false);
-    } finally {
-      setIsRunningGapAnalysis(false);
-      setPipelineProgress("");
-    }
-  };
 
   const executeExpiryExtraction = async (forceRefresh = false) => {
     const activeDocIds = library.map(d => d.id);
@@ -1584,14 +1528,6 @@ END:VCALENDAR`;
                 </button>
                 <button 
                   type="button"
-                  onClick={() => executeGapAnalysis(false)}
-                  disabled={!activeCase || library.length < 2 || isRunningGapAnalysis}
-                  className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-amber-50 border border-amber-300 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed"
-                >
-                  {isRunningGapAnalysis ? <><Loader2 size={12} className="animate-spin text-amber-700" /> Mapping...</> : <><Layers size={12} className="text-amber-700" /> Franchise vs Lease Gap Analysis</>}
-                </button>
-                <button 
-                  type="button"
                   onClick={() => executeTimelineGeneration(false)}
                   disabled={!activeCase || library.length === 0 || isGeneratingTimeline}
                   className="flex items-center gap-1.5 text-xs font-bold text-white bg-brand-accent hover:bg-brand-accent-dark px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed"
@@ -1936,162 +1872,6 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* Gap Analysis Modal */}
-      {showGapModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
-              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Layers className="text-amber-600" size={18} /> Franchise vs Lease Gap Analysis
-              </h2>
-              <div className="flex items-center gap-3">
-                <button onClick={() => executeGapAnalysis(true)} disabled={isRunningGapAnalysis} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isRunningGapAnalysis ? "Mapping..." : "Refresh"}</button>
-                <button onClick={() => handleExportPDF("gap-modal-content", "gap_analysis")} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
-                <button 
-                  onClick={() => {
-                     if(isRunningGapAnalysis) {
-                        if(!window.confirm("Gap analysis is still running in the background. Are you sure you want to close?")) return;
-                     }
-                     setShowGapModal(false);
-                  }} 
-                  className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors ml-2"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-            
-            <div id="gap-modal-content" className="print-target flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
-              {isRunningGapAnalysis ? (
-                 <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-400 gap-4">
-                    <Loader2 size={40} className="animate-spin text-amber-500" />
-                    <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">{pipelineProgress || "Cross-referencing Franchise and Lease obligations..."}</p>
-                 </div>
-              ) : gapReportData ? (
-                <div className="max-w-5xl mx-auto flex flex-col gap-8">
-                   {gapReportData.document_context?.location && (
-                     <div className="bg-slate-50 border border-slate-200 rounded-lg px-6 py-3 flex items-center gap-2">
-                       <MapPin size={16} className="text-slate-400" />
-                       <span className="text-sm font-medium text-slate-700"><strong>Property Location:</strong> {gapReportData.document_context.location}</span>
-                     </div>
-                   )}
-                  {/* Executive Overview */}
-                  <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
-                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">Detected Documents</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <div className="p-4 bg-brand-blue/5 border border-brand-blue/20 rounded-xl relative">
-                          <span className="text-[10px] uppercase font-bold text-brand-blue mb-1 block">Franchise Agreement</span>
-                          <span className="font-semibold text-sm text-slate-800 pr-24 block truncate" title={gapReportData.detected_franchise}>{gapReportData.detected_franchise || "Not Found"}</span>
-                          {gapReportData.detected_franchise && gapReportData.detected_franchise !== "Not Found" && (
-                            <button 
-                               onClick={() => {
-                                 const doc = library.find(d => d.name === gapReportData.detected_franchise || d.filename === gapReportData.detected_franchise);
-                                 if(doc) handleDownloadOriginal(doc.id, doc.filename);
-                               }}
-                               className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] flex items-center gap-1 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-2 rounded transition-colors"
-                            >
-                               <Download size={12} /> PDF
-                            </button>
-                          )}
-                       </div>
-                       <div className="p-4 bg-slate-100 border border-slate-200 rounded-xl relative">
-                          <span className="text-[10px] uppercase font-bold text-slate-500 mb-1 block">Lease Agreement</span>
-                          <span className="font-semibold text-sm text-slate-800 pr-24 block truncate" title={gapReportData.detected_lease}>{gapReportData.detected_lease || "Not Found"}</span>
-                          {gapReportData.detected_lease && gapReportData.detected_lease !== "Not Found" && (
-                            <button 
-                               onClick={() => {
-                                 const doc = library.find(d => d.name === gapReportData.detected_lease || d.filename === gapReportData.detected_lease);
-                                 if(doc) handleDownloadOriginal(doc.id, doc.filename);
-                               }}
-                               className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] flex items-center gap-1 bg-white border border-slate-300 hover:bg-slate-200 text-slate-700 py-1.5 px-2 rounded transition-colors shadow-sm"
-                            >
-                               <Download size={12} /> PDF
-                            </button>
-                          )}
-                       </div>
-                    </div>
-                  </div>
-
-                  {/* Key Terms Mapped Side by Side */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Franchise Terms */}
-                    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                       <div className="bg-brand-blue/10 px-5 py-3 border-b border-brand-blue/20">
-                          <h4 className="text-xs font-bold text-brand-blue uppercase">Franchise Baseline</h4>
-                       </div>
-                       <div className="p-5 space-y-4">
-                          <div>
-                             <span className="block text-[10px] font-bold text-slate-400 uppercase">Term</span>
-                             <p className="text-sm font-medium text-slate-800">{gapReportData.franchise_key_terms?.term || "N/A"}</p>
-                          </div>
-                          <div>
-                             <span className="block text-[10px] font-bold text-slate-400 uppercase">Permitted Use</span>
-                             <p className="text-sm font-medium text-slate-800">{gapReportData.franchise_key_terms?.permitted_use || "N/A"}</p>
-                          </div>
-                       </div>
-                    </div>
-                    {/* Lease Terms */}
-                    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                       <div className="bg-slate-100 px-5 py-3 border-b border-slate-200">
-                          <h4 className="text-xs font-bold text-slate-600 uppercase">Lease Execution</h4>
-                       </div>
-                       <div className="p-5 space-y-4">
-                          <div>
-                             <span className="block text-[10px] font-bold text-slate-400 uppercase">Term</span>
-                             <p className="text-sm font-medium text-slate-800">{gapReportData.lease_key_terms?.term || "N/A"}</p>
-                          </div>
-                          <div>
-                             <span className="block text-[10px] font-bold text-slate-400 uppercase">Permitted Use</span>
-                             <p className="text-sm font-medium text-slate-800">{gapReportData.lease_key_terms?.permitted_use || "N/A"}</p>
-                          </div>
-                       </div>
-                    </div>
-                  </div>
-
-                  {/* Gap Conflicts Table */}
-                  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                     <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-                        <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Compliance Mismatches</h3>
-                     </div>
-                     <div className="divide-y divide-slate-100">
-                       {!gapReportData.gaps || gapReportData.gaps.length === 0 ? (
-                          <div className="p-8 text-center text-sm text-slate-500">No notable gaps detected.</div>
-                       ) : (
-                         gapReportData.gaps.map((gap, i) => (
-                           <div key={i} className="p-6 flex flex-col md:flex-row gap-6 hover:bg-slate-50/50 transition-colors">
-                              <div className="w-40 shrink-0">
-                                 <span className={`inline-flex items-center justify-center px-2.5 py-1 text-[10px] font-bold uppercase rounded-md mb-2 ${gap.status === 'MATCH' ? 'bg-green-100 text-green-700' : gap.status === 'WARNING' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                                    {gap.status}
-                                 </span>
-                                 <h5 className="font-bold text-sm text-slate-800 leading-tight">{gap.category}</h5>
-                              </div>
-                              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                 <div className="bg-amber-50/30 p-3 rounded-lg border border-amber-100 group hover:border-amber-300">
-                                    <span className="block text-[10px] font-bold text-amber-800/60 uppercase mb-1">Franchise Demands</span>
-                                    <p className="text-sm text-slate-700 leading-relaxed font-medium">{gap.franchise_requirement}</p>
-                                 </div>
-                                 <div className="bg-slate-50/50 p-3 rounded-lg border border-slate-200 group hover:border-slate-300">
-                                    <span className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Lease Provides</span>
-                                    <p className="text-sm text-slate-700 leading-relaxed font-medium">{gap.lease_provision}</p>
-                                 </div>
-                              </div>
-                           </div>
-                         ))
-                       )}
-                     </div>
-                  </div>
-
-                </div>
-              ) : (
-                 <div className="flex-1 h-full flex flex-col items-center justify-center text-red-500 gap-4">
-                    <ShieldAlert size={40} />
-                    <p className="font-bold text-sm">Failed to extract gap analysis.</p>
-                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Timeline Modal */}
       {showTimelineModal && (
