@@ -204,6 +204,57 @@ function InnerApp() {
 
   useEffect(() => { activeCaseIdRef.current = activeCaseId; }, [activeCaseId]);
 
+  const [notificationConfig, setNotificationConfig] = useState({
+    is_enabled: false,
+    thresholds_days: "180,90,30",
+    landlord_email: "",
+    franchisee_email: "",
+    franchisor_email: ""
+  });
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+
+  const fetchNotificationConfig = useCallback(async () => {
+    if (!activeCaseId) return;
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
+      const res = await axios.get(`${API_BASE}/workspaces/${activeCaseId}/notifications`, { headers });
+      setNotificationConfig({
+        is_enabled: res.data.is_enabled || false,
+        thresholds_days: res.data.thresholds_days || "180,90,30",
+        landlord_email: res.data.landlord_email || "",
+        franchisee_email: res.data.franchisee_email || "",
+        franchisor_email: res.data.franchisor_email || ""
+      });
+    } catch (err) {
+      console.error("Failed to fetch notification config:", err);
+    }
+  }, [activeCaseId, token, sessionId]);
+
+  useEffect(() => {
+    fetchNotificationConfig();
+  }, [fetchNotificationConfig]);
+
+  const saveNotificationConfig = async (newConfig) => {
+    if (!activeCaseId) return;
+    setIsSavingNotifications(true);
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
+      const res = await axios.put(`${API_BASE}/workspaces/${activeCaseId}/notifications`, newConfig, { headers });
+      setNotificationConfig({
+        is_enabled: res.data.is_enabled || false,
+        thresholds_days: res.data.thresholds_days || "180,90,30",
+        landlord_email: res.data.landlord_email || "",
+        franchisee_email: res.data.franchisee_email || "",
+        franchisor_email: res.data.franchisor_email || ""
+      });
+    } catch (err) {
+      console.error("Failed to save notification config:", err);
+      alert("Failed to save notification settings.");
+    } finally {
+      setIsSavingNotifications(false);
+    }
+  };
+
   // Fetch document brief when selected
   useEffect(() => {
     if (selectedDocId && !docBriefs[selectedDocId]) {
@@ -1162,7 +1213,90 @@ END:VCALENDAR`;
                          </label>
                      </div>
                  </div>
-
+                 <div className="border-t border-slate-200 pt-4">
+                     <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
+                         <BellRing size={12} /> Automated Expiry Alerts
+                     </h3>
+                     <div className="space-y-3 px-2">
+                         <label className="flex items-center justify-between cursor-pointer group hover:bg-slate-50 p-2 rounded-lg transition-colors border border-transparent">
+                             <div className="flex flex-col">
+                                 <span className="font-semibold text-xs text-slate-900 group-hover:text-brand-blue transition-colors">Enable Alerts</span>
+                                 <span className="text-[10px] text-slate-500">Auto-email parties before expiry</span>
+                             </div>
+                             <div className="relative inline-flex items-center cursor-pointer">
+                                 <input 
+                                     type="checkbox" 
+                                     className="sr-only peer"
+                                     checked={notificationConfig.is_enabled}
+                                     onChange={(e) => {
+                                         const newConfig = { ...notificationConfig, is_enabled: e.target.checked };
+                                         setNotificationConfig(newConfig);
+                                         saveNotificationConfig(newConfig);
+                                     }}
+                                 />
+                                 <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-blue"></div>
+                             </div>
+                         </label>
+                         
+                         {notificationConfig.is_enabled && (
+                             <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200 mt-2">
+                                 <div>
+                                     <label className="block text-[10px] font-bold text-slate-500 mb-1">Alert me (days before expiry):</label>
+                                     <div className="flex flex-wrap gap-1 mb-2">
+                                         {notificationConfig.thresholds_days.split(',').filter(Boolean).map(t => (
+                                             <span key={t} className="inline-flex items-center gap-1 bg-white border border-slate-300 text-slate-700 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                                                 {t} days
+                                                 <button onClick={() => {
+                                                     const newT = notificationConfig.thresholds_days.split(',').filter(x => x !== t).join(',');
+                                                     setNotificationConfig({...notificationConfig, thresholds_days: newT});
+                                                 }} className="text-slate-400 hover:text-red-500 transition-colors"><X size={10} /></button>
+                                             </span>
+                                         ))}
+                                     </div>
+                                     <input 
+                                         type="number" 
+                                         placeholder="Add days & press Enter..." 
+                                         className="w-full text-xs p-1.5 border border-slate-300 rounded focus:outline-none focus:border-brand-blue"
+                                         onKeyDown={(e) => {
+                                             if (e.key === 'Enter' && e.target.value) {
+                                                 const val = e.target.value.trim();
+                                                 const current = notificationConfig.thresholds_days ? notificationConfig.thresholds_days.split(',') : [];
+                                                 if (!current.includes(val)) {
+                                                     setNotificationConfig({...notificationConfig, thresholds_days: [...current, val].join(',')});
+                                                 }
+                                                 e.target.value = '';
+                                             }
+                                         }}
+                                     />
+                                 </div>
+                                 
+                                 <div className="space-y-2 mt-3 pt-3 border-t border-slate-200">
+                                     <div>
+                                         <label className="block text-[10px] font-bold text-slate-500 mb-1">Landlord Email</label>
+                                         <input type="email" placeholder="Optional" value={notificationConfig.landlord_email || ''} onChange={e => setNotificationConfig({...notificationConfig, landlord_email: e.target.value})} className="w-full text-xs p-1.5 border border-slate-300 rounded focus:outline-none focus:border-brand-blue" />
+                                     </div>
+                                     <div>
+                                         <label className="block text-[10px] font-bold text-slate-500 mb-1">Franchisee Email</label>
+                                         <input type="email" placeholder="Optional" value={notificationConfig.franchisee_email || ''} onChange={e => setNotificationConfig({...notificationConfig, franchisee_email: e.target.value})} className="w-full text-xs p-1.5 border border-slate-300 rounded focus:outline-none focus:border-brand-blue" />
+                                     </div>
+                                     <div>
+                                         <label className="block text-[10px] font-bold text-slate-500 mb-1">Franchisor Email</label>
+                                         <input type="email" placeholder="Optional" value={notificationConfig.franchisor_email || ''} onChange={e => setNotificationConfig({...notificationConfig, franchisor_email: e.target.value})} className="w-full text-xs p-1.5 border border-slate-300 rounded focus:outline-none focus:border-brand-blue" />
+                                     </div>
+                                 </div>
+                                 
+                                 <button 
+                                     onClick={() => saveNotificationConfig(notificationConfig)}
+                                     disabled={isSavingNotifications}
+                                     className="w-full flex items-center justify-center gap-2 bg-brand-blue text-white text-xs font-bold py-2 rounded shadow-sm hover:bg-blue-700 transition-colors disabled:opacity-50 mt-3"
+                                 >
+                                     {isSavingNotifications ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                                     Save Settings
+                                 </button>
+                             </div>
+                         )}
+                     </div>
+                 </div>
                  <div className="border-t border-slate-200 pt-4">
                      <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
                          <Building2 size={12} /> Agency & Portfolio History
