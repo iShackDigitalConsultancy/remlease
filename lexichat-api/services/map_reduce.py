@@ -136,16 +136,21 @@ async def run_map_reduce_stream(full_text: str, map_instruction: str, reduce_ins
     
     for i, batch in enumerate(batches):
         batch_num = i + 1
-        yield f"data: {json.dumps({'status': 'processing', 'message': f'Analysing section {batch_num} of {total_batches}...'})}\n\n"
         
-        res = await map_phase(batch, map_instruction)
+        map_task_promise = asyncio.create_task(map_phase(batch, map_instruction))
+        while not map_task_promise.done():
+            yield f"data: {json.dumps({'status': 'processing', 'message': f'Analysing section {batch_num} of {total_batches}...'})}\n\n"
+            await asyncio.sleep(3.0)
+            
+        res = map_task_promise.result()
         map_results.append(res)
-        
-        await asyncio.sleep(0.5)
 
-    yield f"data: {json.dumps({'status': 'processing', 'message': 'Synthesizing final document...'})}\n\n"
-    
-    final_result = await reduce_phase(map_results, reduce_instruction)
+    reduce_task_promise = asyncio.create_task(reduce_phase(map_results, reduce_instruction))
+    while not reduce_task_promise.done():
+        yield f"data: {json.dumps({'status': 'processing', 'message': 'Synthesizing final document... (this can take up to a minute)'})}\n\n"
+        await asyncio.sleep(3.0)
+        
+    final_result = reduce_task_promise.result()
     
     yield f"data: {json.dumps({'status': 'complete', 'data': final_result})}\n\n"
 
@@ -166,11 +171,17 @@ async def run_feature_gated_pipeline(full_text: str, map_instruction: str, reduc
     else:
         yield f"data: {json.dumps({'status': 'processing', 'message': 'Analysing document (Legacy Mode)...'})}\n\n"
         try:
-            # Execute the legacy sync/async logic
+            # Execute the legacy sync/async logic as a non-blocking task
             if asyncio.iscoroutinefunction(legacy_func):
-                result = await legacy_func()
+                legacy_task = asyncio.create_task(legacy_func())
             else:
-                result = legacy_func()
+                legacy_task = asyncio.create_task(asyncio.to_thread(legacy_func))
+                
+            while not legacy_task.done():
+                yield f"data: {json.dumps({'status': 'processing', 'message': 'Analysing document (Legacy Mode)...'})}\n\n"
+                await asyncio.sleep(3.0)
+                
+            result = legacy_task.result()
             yield f"data: {json.dumps({'status': 'complete', 'data': result})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
