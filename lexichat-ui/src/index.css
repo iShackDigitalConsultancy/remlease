@@ -51,3 +51,10 @@
     margin: 1cm;
   }
 }
+
+
+@media print {
+  body * { visibility: hidden; }
+  .print-target, .print-target * { visibility: visible; }
+  .print-target { position: absolute; left: 0; top: 0; overflow: visible !important; width: 100%; height: auto; }
+}

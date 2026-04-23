@@ -231,7 +231,7 @@ Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON obje
         return json.loads(raw)
 
     workspace_id = doc.workspace_id
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_audit.json")
+    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_fundamental_terms.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
@@ -268,81 +268,93 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
-    map_task = "Extract all dated events, milestones, and party obligations from this section. Also extract: property location and any party obligations associated with each event."
-    reduce_task = """Produce a chronological timeline of all events across the full document.
+    map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, premises description and address, lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, payment/banking details, renewal options, special conditions, and suretyship details."
+    reduce_task = """Produce a comprehensive summary of all fundamental lease terms.
 JSON SCHEMA REQUIREMENT:
 {{
-  "document_context": {{
-    "location": "Full property address or premises description",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
+  "fundamental_terms": {{
+    "lessor": {{
+      "name": "string",
+      "registration": "string",
+      "representative": "string",
+      "domicilium": "string"
+    }},
+    "lessee": {{
+      "name": "string",
+      "registration": "string", 
+      "representative": "string",
+      "domicilium": "string"
+    }},
+    "premises": {{
+      "description": "string",
+      "address": "string",
+      "erf": "string"
+    }},
+    "lease_period": "string",
+    "commencement_date": "YYYY-MM-DD",
+    "expiry_date": "YYYY-MM-DD",
+    "beneficial_occupation_date": "YYYY-MM-DD or null",
+    "renewal_option": "string",
+    "escalation_rate": "string",
+    "permitted_use": "string",
+    "security_deposit": "string",
+    "rental_schedule": [
       {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
+        "period": "YYYY-MM-DD to YYYY-MM-DD",
+        "amount": "R X,XXX.XX per month",
+        "note": "optional note"
       }}
-    ]
-  }},
-  "risk_summary": "A 2-3 sentence executive summary explaining how the risk profile has shifted from Document A to Document B.",
-  "changes": [
-    {{
-      "type": "ADDED",
-      "original_text": null,
-      "new_text": "Exact text added to Document B",
-      "impact": "High/Med/Low impact: Short explanation of legal implication.",
-      "clause_reference": "e.g. 4.2"
+    ],
+    "trading_hours": {{
+      "monday_thursday": "string",
+      "friday": "string",
+      "saturday": "string",
+      "sunday_public_holidays": "string"
     }},
-    {{
-      "type": "DELETED",
-      "original_text": "Exact text removed from Document A",
-      "new_text": null,
-      "impact": "High/Med/Low impact: Short explanation of legal implication.",
-      "clause_reference": "e.g. 4.2"
+    "payment_details": {{
+      "bank": "string",
+      "branch": "string",
+      "account_number": "string",
+      "account_type": "string"
     }},
-    {{
-      "type": "MODIFIED",
-      "original_text": "Exact original clause in Document A",
-      "new_text": "Exact new clause in Document B",
-      "impact": "High/Med/Low impact: Short explanation of how the modification shifts obligation.",
-      "clause_reference": "e.g. 4.2"
-    }}
-  ]
+    "special_conditions": ["string array"],
+    "suretyship": "string or null"
+  }}
 }}
 
 Return ONLY the raw JSON object."""
 
     def legacy_op():
         old_full_text = str(full_text)[:18000]
-        prompt = f"""You are a senior legal analyst creating a comprehensive chronologically-ordered Master Timeline and Cast of Characters from the provided documents.
+        prompt = f"""You are a master commercial real estate attorney. Extract the fundamental terms of the provided lease or franchise agreement.
 
 DOCUMENTS TEXT:
 {old_full_text}
 
 INSTRUCTIONS:
-1. Identify all key people, organizations, or entities mentioned (Cast of Characters).
-2. Extract all events with implied or explicit dates into a unified Master Timeline.
-3. Output ONLY valid JSON matching this exact structure:
+Output ONLY valid JSON matching this exact structure:
 {{
-  "characters": [
-    {{
-      "name": "Jane Doe",
-      "role": "Plaintiff",
-      "description": "Former employee of the company..."
-    }}
-  ],
-  "timeline": [
-    {{
-      "date": "2023-01-15",
-      "event": "Employment Contract Signed",
-      "source": "contract.pdf"
-    }}
-  ]
+  "fundamental_terms": {{
+    "lessor": {{ "name": "string", "registration": "string", "representative": "string", "domicilium": "string" }},
+    "lessee": {{ "name": "string", "registration": "string", "representative": "string", "domicilium": "string" }},
+    "premises": {{ "description": "string", "address": "string", "erf": "string" }},
+    "lease_period": "string",
+    "commencement_date": "YYYY-MM-DD",
+    "expiry_date": "YYYY-MM-DD",
+    "beneficial_occupation_date": "YYYY-MM-DD or null",
+    "renewal_option": "string",
+    "escalation_rate": "string",
+    "permitted_use": "string",
+    "security_deposit": "string",
+    "rental_schedule": [ {{ "period": "YYYY-MM-DD to YYYY-MM-DD", "amount": "R X,XXX.XX per month", "note": "optional note" }} ],
+    "trading_hours": {{ "monday_thursday": "string", "friday": "string", "saturday": "string", "sunday_public_holidays": "string" }},
+    "payment_details": {{ "bank": "string", "branch": "string", "account_number": "string", "account_type": "string" }},
+    "special_conditions": ["string array"],
+    "suretyship": "string or null"
+  }}
 }}
 
-If a date is vague (e.g. "Early 2023"), express it as roughly as possible inside the date field. Make sure the timeline array chronologically ordered from oldest to newest. Return ONLY the raw JSON object."""
+Return ONLY the raw JSON object."""
         resp = groq_client.chat.completions.create(
             model='llama-3.3-70b-versatile',
             messages=[{'role': 'user', 'content': prompt}],
@@ -550,7 +562,7 @@ Output exactly this JSON structure:
       "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
       "franchise_requirement": "What does the franchise demand?",
       "lease_provision": "What does the lease actually say?",
-      "status": "RISK" or "MATCH" or "WARNING",
+      "status": "RISK | MATCH | WARNING",
       "clause_reference_lease": "e.g. 4.2",
       "clause_reference_franchise": "e.g. 5.1"
     }}
@@ -594,7 +606,7 @@ Output exactly this JSON structure:
       "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
       "franchise_requirement": "What does the franchise demand?",
       "lease_provision": "What does the lease actually say?",
-      "status": "RISK" or "MATCH" or "WARNING",
+      "status": "RISK | MATCH | WARNING",
       "clause_reference_lease": "e.g. 4.2",
       "clause_reference_franchise": "e.g. 5.1"
     }}

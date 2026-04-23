@@ -9,7 +9,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 import { 
   FileText, UploadCloud, MessageSquare, Send, CheckCircle2, 
-  Loader2, Scale, BookOpen, Clock, ChevronRight, ChevronDown, ChevronUp, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare, Calendar, CalendarPlus, Database, BellRing, Layers, ExternalLink, Printer, RefreshCw
+  Loader2, Scale, BookOpen, Clock, ChevronRight, ChevronDown, ChevronUp, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare, Calendar, CalendarPlus, Database, BellRing, Layers, ExternalLink, Printer, RefreshCw, MapPin
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
@@ -77,23 +77,8 @@ function InnerApp() {
     }
   };
 
-  const handleExportPDF = async (elementId, reportType) => {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-    try {
-      const canvas = await window.html2canvas(el, { scale: 2 });
-      const imgData = canvas.toDataURL("image/jpeg", 0.98);
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-      const width = pdf.internal.pageSize.getWidth();
-      const height = (canvas.height * width) / canvas.width;
-      pdf.addImage(imgData, "JPEG", 0, 0, width, height);
-      const dateStr = new Date().toISOString().split("T")[0];
-      pdf.save(`${reportType}_${dateStr}.pdf`);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to export PDF.");
-    }
+  const handleExportPDF = (reportType) => {
+    window.print();
   };
 
   const [isUploading, setIsUploading] = useState(false);
@@ -1588,7 +1573,7 @@ END:VCALENDAR`;
                   disabled={!activeCase || library.length === 0 || isExtractingExpiries || isRunningGapAnalysis}
                   className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                 >
-                  {isExtractingExpiries ? <><Loader2 size={12} className="animate-spin" /> Scanning...</> : <><Calendar size={12} /> Scan Expiries/Renewals</>}
+                  {isExtractingExpiries ? <><Loader2 size={12} className="animate-spin" /> Scanning...</> : <><Clock size={12} /> Scan Expiries/Renewals</>}
                 </button>
                 <button 
                   type="button"
@@ -1604,7 +1589,7 @@ END:VCALENDAR`;
                   disabled={!activeCase || library.length === 0 || isGeneratingTimeline}
                   className="flex items-center gap-1.5 text-xs font-bold text-white bg-brand-accent hover:bg-brand-accent-dark px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed"
                 >
-                  {isGeneratingTimeline ? <><Loader2 size={12} className="animate-spin" /> Extracting...</> : <><Clock size={12} /> Generate Master Timeline</>}
+                  {isGeneratingTimeline ? <><Loader2 size={12} className="animate-spin" /> Extracting...</> : <><FileText size={12} /> Extract Fundamental Terms</>}
                 </button>
               </div>
             </div>
@@ -1667,7 +1652,7 @@ END:VCALENDAR`;
               </div>
             </div>
             
-            <div id="compare-modal-content" className="flex-1 overflow-y-auto flex flex-col bg-white p-6 md:p-8">
+            <div id="compare-modal-content" className="print-target flex-1 overflow-y-auto flex flex-col bg-white p-6 md:p-8">
               {isComparing ? (
                  <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-brand-accent" />
@@ -1675,6 +1660,12 @@ END:VCALENDAR`;
                  </div>
               ) : compareResult ? (
                 <div className="max-w-4xl mx-auto w-full space-y-8">
+                   {compareResult.document_context?.location && (
+                     <div className="bg-slate-50 border border-slate-200 rounded-lg px-6 py-3 flex items-center gap-2">
+                       <MapPin size={16} className="text-slate-400" />
+                       <span className="text-sm font-medium text-slate-700"><strong>Property Location:</strong> {compareResult.document_context.location}</span>
+                     </div>
+                   )}
                   {/* Executive Risk Summary */}
                   <div className="bg-slate-50 border border-brand-blue/30 rounded-xl p-6 relative overflow-hidden shadow-sm">
                      <div className="absolute top-0 left-0 w-1 h-full bg-brand-blue"></div>
@@ -1758,7 +1749,13 @@ END:VCALENDAR`;
               </div>
             </div>
             
-            <div id="audit-modal-content" className="p-6 overflow-y-auto flex-1 flex flex-col gap-4">
+            <div id="audit-modal-content" className="print-target p-6 overflow-y-auto flex-1 flex flex-col gap-4">
+               {auditResult?.document_context?.location && (
+                 <div className="bg-slate-50 border border-slate-200 rounded-lg px-6 py-3 flex items-center gap-2">
+                   <MapPin size={16} className="text-slate-400" />
+                   <span className="text-sm font-medium text-slate-700"><strong>Property Location:</strong> {auditResult.document_context.location}</span>
+                 </div>
+               )}
                <div>
                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Audit Policy Checklist</label>
                    <textarea
@@ -1833,7 +1830,7 @@ END:VCALENDAR`;
               </div>
             </div>
             
-            <div id="expiry-modal-content" className="flex-1 overflow-y-auto bg-white p-6 md:p-8">
+            <div id="expiry-modal-content" className="print-target flex-1 overflow-y-auto bg-white p-6 md:p-8">
               {isExtractingExpiries ? (
                  <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-brand-accent" />
@@ -1841,6 +1838,12 @@ END:VCALENDAR`;
                  </div>
               ) : expiryData ? (
                 <div className="max-w-4xl mx-auto space-y-6">
+                   {expiryData.document_context?.location && (
+                     <div className="bg-slate-50 border border-slate-200 rounded-lg px-6 py-3 flex items-center gap-2">
+                       <MapPin size={16} className="text-slate-400" />
+                       <span className="text-sm font-medium text-slate-700"><strong>Property Location:</strong> {expiryData.document_context.location}</span>
+                     </div>
+                   )}
                   {(!expiryData.expiries || expiryData.expiries.length === 0) ? (
                      <div className="text-center p-12 text-slate-500 text-sm border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50">No expiry dates could be identified in the active documents.</div>
                   ) : (
@@ -1860,25 +1863,6 @@ END:VCALENDAR`;
                                className="text-[10px] mt-1 ml-7 flex w-max items-center gap-1 bg-brand-blue/5 hover:bg-brand-blue/15 text-brand-blue py-1 px-2 rounded transition-colors"
                              >
                                 <Download size={10} /> Download Source PDF
-                             </button>
-                           </div>
-                           <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
-                             <button 
-                                onClick={() => generateICS(exp)}
-                                className="flex items-center gap-1.5 bg-brand-blue/10 text-brand-blue hover:bg-brand-blue hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
-                             >
-                                <CalendarPlus size={14} /> Add to Calendar
-                             </button>
-                             <button 
-                                onClick={(e) => {
-                                  const btn = e.currentTarget;
-                                  const prev = btn.innerHTML;
-                                  btn.innerHTML = `<span class="flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle-2 text-green-500"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg> Pushed</span>`;
-                                  setTimeout(() => { btn.innerHTML = prev; }, 2000);
-                                }}
-                                className="flex items-center gap-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-slate-300 shadow-sm"
-                             >
-                                <Database size={14} /> Push to SmartBuilding API
                              </button>
                            </div>
                         </div>
@@ -1955,14 +1939,20 @@ END:VCALENDAR`;
               </div>
             </div>
             
-            <div id="gap-modal-content" className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
+            <div id="gap-modal-content" className="print-target flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
               {isRunningGapAnalysis ? (
                  <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-amber-500" />
                     <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">{pipelineProgress || "Cross-referencing Franchise and Lease obligations..."}</p>
                  </div>
               ) : gapReportData ? (
-                <div className="max-w-5xl mx-auto space-y-8">
+                <div className="max-w-5xl mx-auto flex flex-col gap-8">
+                   {gapReportData.document_context?.location && (
+                     <div className="bg-slate-50 border border-slate-200 rounded-lg px-6 py-3 flex items-center gap-2">
+                       <MapPin size={16} className="text-slate-400" />
+                       <span className="text-sm font-medium text-slate-700"><strong>Property Location:</strong> {gapReportData.document_context.location}</span>
+                     </div>
+                   )}
                   {/* Executive Overview */}
                   <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
                     <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">Detected Documents</h3>
@@ -2109,60 +2099,68 @@ END:VCALENDAR`;
               </div>
             </div>
             
-            <div id="timeline-modal-content" className="flex-1 overflow-hidden flex flex-col md:flex-row bg-white">
+            <div id="timeline-modal-content" className="print-target flex-1 overflow-hidden flex flex-col bg-white">
               {isGeneratingTimeline ? (
                  <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
                     <Loader2 size={40} className="animate-spin text-brand-accent" />
                     <p className="font-bold text-sm text-slate-500 animate-pulse tracking-wide">{pipelineProgress || "Synthesizing multiple documents into a chronological history..."}</p>
                  </div>
               ) : timelineData ? (
-                <>
-                  {/* Cast of Characters (Left Pane) */}
-                  <div className="w-full md:w-1/3 border-r border-slate-200 bg-slate-50 p-6 overflow-y-auto">
-                     <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2">
-                        <Users size={14} className="text-brand-blue" /> Cast of Characters
-                     </h3>
-                     <div className="flex flex-col gap-4">
-                        {timelineData.characters?.map((char, idx) => (
-                          <div key={idx} className="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
-                             <span className="inline-block px-2 py-0.5 bg-brand-accent/10 border border-brand-accent/20 text-brand-accent text-[10px] font-bold uppercase tracking-wider rounded-md mb-2">{char.role}</span>
-                             <h4 className="text-sm font-bold text-slate-900 mb-1">{char.name}</h4>
-                             <p className="text-xs text-slate-600 leading-relaxed">{char.description}</p>
-                          </div>
-                        ))}
-                        {(!timelineData.characters || timelineData.characters.length === 0) && (
-                          <div className="text-center p-6 text-slate-500 text-sm">No specific named entities identified.</div>
-                        )}
+                 <div className="w-full flex flex-col h-full overflow-hidden">
+                   {timelineData.document_context?.location && (
+                     <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 shrink-0 flex items-center gap-2">
+                       <MapPin size={16} className="text-slate-400" />
+                       <span className="text-sm font-medium text-slate-700"><strong>Property Location:</strong> {timelineData.document_context.location}</span>
                      </div>
-                  </div>
-                  
-                  {/* Master Timeline (Right Pane) */}
-                  <div className="w-full md:w-2/3 p-8 overflow-y-auto bg-white relative">
-                     <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-8 flex items-center gap-2">
-                        <Clock size={14} className="text-brand-accent" /> Chronological Event Trace
-                     </h3>
-                     
-                     <div className="relative pl-6 border-l-2 border-brand-accent/30 space-y-8 pb-10">
-                       {timelineData.timeline?.map((event, idx) => (
-                          <div key={idx} className="relative group">
-                             <div className="absolute w-3.5 h-3.5 rounded-full bg-brand-accent border-4 border-white -left-[31px] top-1 group-hover:scale-125 transition-transform shadow-sm" />
-                             <div className="flex items-start gap-3 flex-col">
-                                <div className="flex items-center gap-3">
-                                   <span className="text-xs font-black text-white bg-brand-accent px-2.5 py-1 rounded-md shadow-sm">{event.date}</span>
-                                   <span className="flex items-center gap-1 text-[10px] font-medium text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full"><FileText size={10}/> {event.source}</span>
-                                </div>
-                                <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 w-full break-words hover:border-brand-blue/30 transition-colors">
-                                   <p className="text-sm text-slate-800 leading-relaxed font-medium">{event.event}</p>
-                                </div>
-                             </div>
-                          </div>
-                       ))}
-                       {(!timelineData.timeline || timelineData.timeline.length === 0) && (
-                          <div className="text-center p-12 text-slate-500 text-sm border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50">No chronological events extracted from these documents.</div>
-                       )}
-                     </div>
-                  </div>
-                </>
+                   )}
+                   <div className="flex-1 overflow-y-auto flex flex-col md:flex-row">
+                      {/* Cast of Characters (Left Pane) */}
+                      <div className="w-full md:w-1/3 border-r border-slate-200 bg-slate-50 p-6 overflow-y-auto">
+                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                            <Users size={14} className="text-brand-blue" /> Cast of Characters
+                         </h3>
+                         <div className="flex flex-col gap-4">
+                            {timelineData.characters?.map((char, idx) => (
+                              <div key={idx} className="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
+                                 <span className="inline-block px-2 py-0.5 bg-brand-accent/10 border border-brand-accent/20 text-brand-accent text-[10px] font-bold uppercase tracking-wider rounded-md mb-2">{char.role}</span>
+                                 <h4 className="text-sm font-bold text-slate-900 mb-1">{char.name}</h4>
+                                 <p className="text-xs text-slate-600 leading-relaxed">{char.description}</p>
+                              </div>
+                            ))}
+                            {(!timelineData.characters || timelineData.characters.length === 0) && (
+                              <div className="text-center p-6 text-slate-500 text-sm">No specific named entities identified.</div>
+                            )}
+                         </div>
+                      </div>
+                      
+                      {/* Master Timeline (Right Pane) */}
+                      <div className="w-full md:w-2/3 p-8 overflow-y-auto bg-white relative">
+                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-8 flex items-center gap-2">
+                            <Clock size={14} className="text-brand-accent" /> Chronological Event Trace
+                         </h3>
+                         
+                         <div className="relative pl-6 border-l-2 border-brand-accent/30 space-y-8 pb-10">
+                           {timelineData.timeline?.map((event, idx) => (
+                              <div key={idx} className="relative group">
+                                 <div className="absolute w-3.5 h-3.5 rounded-full bg-brand-accent border-4 border-white -left-[31px] top-1 group-hover:scale-125 transition-transform shadow-sm" />
+                                 <div className="flex items-start gap-3 flex-col">
+                                    <div className="flex items-center gap-3">
+                                       <span className="text-xs font-black text-white bg-brand-accent px-2.5 py-1 rounded-md shadow-sm">{event.date}</span>
+                                       <span className="flex items-center gap-1 text-[10px] font-medium text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full"><FileText size={10}/> {event.source}</span>
+                                    </div>
+                                    <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 w-full break-words hover:border-brand-blue/30 transition-colors">
+                                       <p className="text-sm text-slate-800 leading-relaxed font-medium">{event.event}</p>
+                                    </div>
+                                 </div>
+                              </div>
+                           ))}
+                           {(!timelineData.timeline || timelineData.timeline.length === 0) && (
+                              <div className="text-center p-12 text-slate-500 text-sm border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50">No chronological events extracted from these documents.</div>
+                           )}
+                         </div>
+                      </div>
+                   </div>
+                 </div>
               ) : (
                  <div className="flex-1 flex flex-col items-center justify-center text-red-500 gap-4">
                     <ShieldAlert size={40} />
@@ -2266,7 +2264,13 @@ END:VCALENDAR`;
 
           <div className="flex-1 bg-slate-900/50 overflow-y-auto flex justify-center py-6">
              <Document
-                file={`${API_BASE}/document/${selectedDocId}`}
+                file={{
+                  url: `${API_BASE}/document/${selectedDocId}`,
+                  httpHeaders: {
+                      Authorization: localStorage.getItem("rem_auth_token") ? `Bearer ${localStorage.getItem("rem_auth_token")}` : undefined,
+                      "x-session-id": !localStorage.getItem("rem_auth_token") ? localStorage.getItem("session_id") : undefined
+                  }
+                }}
                 loading={
                    <div className="flex flex-col items-center justify-center text-slate-400 h-full mt-32">
                       <Loader2 size={32} className="animate-spin mb-4 text-brand-blue" />
@@ -2481,7 +2485,6 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* ── FEATURES ── */}
       {/* ── FEATURES ── */}
       <section id="features" className="bg-white px-6 py-24 relative z-10 grid-bg">
         <div className="max-w-4xl mx-auto">
