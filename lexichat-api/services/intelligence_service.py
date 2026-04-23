@@ -126,16 +126,21 @@ async def document_audit(payload, current_user: Optional[models.User] = Depends(
     if not doc:
         raise HTTPException(status_code=403, detail="Access denied for document audit")
         
-    # 2. Extract Document Text directly from local cached markdown
-    file_path = os.path.join(UPLOAD_DIR, f"{payload.doc_id}.md")
-    if not os.path.exists(file_path):
+    doc_text = None
+    for candidate_id in [payload.doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
+        if not candidate_id: continue
+        file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "r") as f:
+                    doc_text = f.read()
+                break
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to read file: {e}")
+                
+    if not doc_text:
         raise HTTPException(status_code=404, detail="Underlying document markdown file not found")
-        
-    try:
-        with open(file_path, "r") as f:
-            full_text = f.read()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read local document: {str(e)}")
+    full_text = doc_text
 
     map_task = f"Extract all policy clauses, compliance obligations, and risk provisions from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., parties, and any compliance obligations per party."
     reduce_task = f"""Produce a structured audit report flagging all compliance risks and policy gaps against this strictly provided policy:
@@ -256,19 +261,22 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
             
-        file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, "r") as f:
-                    doc_text = f.read()
-                full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
-            except Exception as e:
-                print(f"Failed to read {file_path}: {e}")
+        for candidate_id in [doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
+            if not candidate_id: continue
+            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "r") as f:
+                        doc_text = f.read()
+                    full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
+                    break
+                except Exception as e:
+                    print(f"Failed to read {file_path}: {e}")
                 
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
-    map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, payment/banking details, renewal options, special conditions, and suretyship details. If the document uses a PREAMBLE or numbered clause format instead of a schedule table, extract the same information from those sections. Look for LESSOR/LESSEE definitions, PREMISES description in clause 1, COMMENCEMENT DATE in clause 3, EXPIRY DATE in clause 3, BASIC MONTHLY RENTAL in clause 4 tables, DEPOSITS in clause 8, SPECIAL CONDITIONS in clause 16. If this is a franchise agreement, also extract: commencement date from Annexure A Financial and Other Terms item 7, duration from item 8, upfront license fee from item 1, monthly franchise fee from item 2."
+    map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, payment/banking details, renewal options, special conditions, and suretyship details. If the document uses a PREAMBLE or numbered clause format instead of a schedule table, extract the same information from those sections. Look for LESSOR/LESSEE definitions, PREMISES description in clause 1, COMMENCEMENT DATE in clause 3, EXPIRY DATE in clause 3, BASIC MONTHLY RENTAL in clause 4 tables, DEPOSITS in clause 8, SPECIAL CONDITIONS in clause 16. For franchise agreements, the COMMENCEMENT DATE is explicitly stated in Annexure A under 'FINANCIAL AND OTHER TERMS' as item 7 'Commencement Date'. The EXPIRY DATE must be calculated as commencement date plus duration (item 8). The DURATION is typically stated as 'X years from Commencement Date'. Extract these values precisely."
     reduce_task = """Produce a comprehensive summary of all fundamental lease terms.
 JSON SCHEMA REQUIREMENT:
 {{
@@ -331,7 +339,8 @@ JSON SCHEMA REQUIREMENT:
 }}
 
 If this is a lease agreement only, set all franchise_terms fields to null.
-If this is a franchise agreement, extract commencement date from Annexure A item 7, duration from item 8, upfront license fee from item 1, monthly fee from item 2.
+franchise_terms.commencement_date: Extract from Annexure A item 7 — do not leave null if the document is a franchise agreement.
+franchise_terms.expiry_date: Calculate from commencement + duration if not explicit.
 
 Return ONLY the raw JSON object."""
 
@@ -374,7 +383,8 @@ Output ONLY valid JSON matching this exact structure:
 }}
 
 If this is a lease agreement only, set all franchise_terms fields to null.
-If this is a franchise agreement, extract commencement date from Annexure A item 7, duration from item 8, upfront license fee from item 1, monthly fee from item 2.
+franchise_terms.commencement_date: Extract from Annexure A item 7 — do not leave null if the document is a franchise agreement.
+franchise_terms.expiry_date: Calculate from commencement + duration if not explicit.
 
 Return ONLY the raw JSON object."""
         resp = groq_client.chat.completions.create(
@@ -416,14 +426,17 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
             workspace_id = doc.workspace_id
             
         filenames.append(doc.filename)
-        file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, "r") as f:
-                    doc_text = f.read()
-                full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
-            except Exception as e:
-                print(f"Failed to read {file_path}: {e}")
+        for candidate_id in [doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
+            if not candidate_id: continue
+            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "r") as f:
+                        doc_text = f.read()
+                    full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
+                    break
+                except Exception as e:
+                    print(f"Failed to read {file_path}: {e}")
                 
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
@@ -561,14 +574,17 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
             workspace_id = doc.workspace_id
             
         filenames.append(doc.filename)
-        file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, "r") as f:
-                    doc_text = f.read()
-                full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
-            except Exception as e:
-                print(f"Failed to read {file_path}: {e}")
+        for candidate_id in [doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
+            if not candidate_id: continue
+            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "r") as f:
+                        doc_text = f.read()
+                    full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
+                    break
+                except Exception as e:
+                    print(f"Failed to read {file_path}: {e}")
                 
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
@@ -695,16 +711,22 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
     example_objects = []
     # Process up to 10 documents, taking 6000 characters each to avoid heavy context limits.
     for doc in docs[:10]:
-        file_path = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.md")
-        if not os.path.exists(file_path):
-            file_path = os.path.join(UPLOAD_DIR, f"{doc.id}.md")
-            
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, "r") as f:
-                    doc_text = f.read()
-                full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
-                example_objects.append(f"""  {{
+        found_text = False
+        for candidate_id in [getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
+            if not candidate_id: continue
+            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "r") as f:
+                        doc_text = f.read()
+                    full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
+                    found_text = True
+                    break
+                except Exception as e:
+                    pass
+        
+        if found_text:
+            example_objects.append(f"""  {{
     "filename": "{doc.filename}",
     "doc_type": "Lease OR Franchise Agreement OR Unknown",
     "expiry_date": "YYYY-MM-DD",
@@ -715,8 +737,6 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
     "parties": [{{"role": "Landlord/etc", "name": "Entity Name"}}],
     "obligations_summary": {{"financial": "String", "operational": "String"}}
   }}""")
-            except Exception as e:
-                pass
                 
     if not full_text:
         return {"data": []}
@@ -827,16 +847,20 @@ async def document_compare(payload, current_user: Optional[models.User] = Depend
         if not workspace_id:
             workspace_id = doc.workspace_id
             
-        file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
-        if not os.path.exists(file_path):
+        doc_text = None
+        for candidate_id in [doc_id, doc.pinecone_doc_id, doc.id]:
+            if not candidate_id: continue
+            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "r") as f:
+                        doc_text = f.read()
+                    break
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"Failed to extract text from {doc.filename}: {str(e)}")
+        if not doc_text:
             raise HTTPException(status_code=404, detail=f"Source markdown for {doc.filename} not found.")
-            
-        try:
-            with open(file_path, "r") as f:
-                doc_text = f.read()
-            doc_texts[doc_id] = str(doc_text)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to extract text from {doc.filename}: {str(e)}")
+        doc_texts[doc_id] = str(doc_text)
 
     full_text = f"--- DOCUMENT A START: {payload.doc_id_a} ---\n{doc_texts[payload.doc_id_a]}\n--- DOCUMENT B START: {payload.doc_id_b} ---\n{doc_texts[payload.doc_id_b]}"
 
