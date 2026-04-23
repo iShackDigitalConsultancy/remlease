@@ -2,10 +2,9 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Depends, sta
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
-from services import notification_service
-import os, EmailStr
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional
+import os
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -20,6 +19,7 @@ from utils.chunking import smart_chunk, CLAUSE_PATTERN
 from utils.exporters import export_markdown_to_docx
 from services import intelligence_service
 from services import data_service
+from services import notification_service
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -221,10 +221,6 @@ def reset_pinecone_admin(
     from services import admin_service
     return admin_service.reset_pinecone_admin(request_headers)
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
 class NotificationConfigRequest(BaseModel):
     is_enabled: bool
     thresholds_days: str
@@ -248,3 +244,7 @@ def trigger_expiry_alerts(x_cron_secret: Optional[str] = Header(None), db: Sessi
     if not expected_secret or x_cron_secret != expected_secret:
         raise HTTPException(status_code=403, detail="Forbidden cron access")
     return notification_service.trigger_expiry_alerts(db)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
