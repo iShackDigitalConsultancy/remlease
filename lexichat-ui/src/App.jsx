@@ -1521,7 +1521,7 @@ END:VCALENDAR`;
                 <button 
                   type="button"
                   onClick={() => executeExpiryExtraction(false)}
-                  disabled={!activeCase || library.length === 0 || isExtractingExpiries || isRunningGapAnalysis}
+                  disabled={!activeCase || library.length === 0 || isExtractingExpiries}
                   className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                 >
                   {isExtractingExpiries ? <><Loader2 size={12} className="animate-spin" /> Scanning...</> : <><Clock size={12} /> Scan Expiries/Renewals</>}
