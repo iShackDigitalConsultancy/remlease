@@ -83,3 +83,11 @@ class NotificationLog(Base):
     status = Column(String, default="success")
     
     document = relationship("WorkspaceDocument")
+
+from pydantic import BaseModel
+
+class PDFExportPayload(BaseModel):
+    report_type: str
+    report_data: dict
+    workspace_name: str = "Portfolio"
+    document_names: list = []

@@ -245,6 +245,34 @@ def trigger_expiry_alerts(x_cron_secret: Optional[str] = Header(None), db: Sessi
         raise HTTPException(status_code=403, detail="Forbidden cron access")
     return notification_service.trigger_expiry_alerts(db)
 
+from models import PDFExportPayload
+
+@app.post("/api/export/pdf")
+async def export_pdf(
+    payload: PDFExportPayload,
+    current_user = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    from services.pdf_service import generate_pdf
+    from fastapi.responses import Response
+    
+    pdf_bytes = generate_pdf(
+        report_type=payload.report_type,
+        report_data=payload.report_data,
+        workspace_name=payload.workspace_name,
+        document_names=payload.document_names
+    )
+    
+    filename = f"rem_leases_{payload.report_type}_report.pdf"
+    return Response(
+        content=pdf_bytes.getvalue(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 
+                f"attachment; filename={filename}"
+        }
+    )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

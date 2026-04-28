@@ -84,8 +84,35 @@ function InnerApp() {
     }
   };
 
-  const handleExportPDF = (reportType) => {
-    window.print();
+  const handleExportPDF = async (reportType, reportData, workspaceName, documentNames) => {
+    try {
+      const headers = token 
+        ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+        : { 'x-session-id': sessionId, 'Content-Type': 'application/json' };
+      
+      const res = await fetch(`${API_BASE}/export/pdf`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          report_type: reportType,
+          report_data: reportData || {},
+          workspace_name: workspaceName || "Portfolio",
+          document_names: documentNames || []
+        })
+      });
+      
+      if (!res.ok) throw new Error('Export failed');
+      
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rem_leases_${reportType}_report.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Failed to export PDF. Please try again.');
+    }
   };
 
   const [isUploading, setIsUploading] = useState(false);
@@ -1582,7 +1609,7 @@ END:VCALENDAR`;
                 <button onClick={() => executeComparison(compareTargetDocId, true)} disabled={isComparing} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isComparing ? "Refreshing..." : "Refresh"}</button>
                 <button onClick={() => handleDownloadOriginal(selectedDocId, "Base_Document.pdf")} className="text-xs flex items-center gap-1.5 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-3 rounded-md transition-colors" title="Download Base Document"><Download size={14}/> PDF 1</button>
                 <button onClick={() => handleDownloadOriginal(compareTargetDocId, "Target_Document.pdf")} className="text-xs flex items-center gap-1.5 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-3 rounded-md transition-colors" title="Download Comparison Document"><Download size={14}/> PDF 2</button>
-                <button onClick={() => handleExportPDF("compare-modal-content", "compare")} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
+                <button onClick={() => handleExportPDF("compare", compareResult, activeCase?.name, [compareTargetDocId, selectedDocId])} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
                 <button 
                   onClick={() => {
                      if(isComparing && !window.confirm("Comparison is still running. Are you sure you want to close?")) return;
@@ -1687,7 +1714,7 @@ END:VCALENDAR`;
               <div className="flex items-center gap-3">
                 <button onClick={() => executeAudit(true)} disabled={isAuditing} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isAuditing ? "Refreshing..." : "Refresh"}</button>
                 <button onClick={() => handleDownloadOriginal(auditDocId, selectedDocId === auditDocId ? cases.find(c => c.id === activeCaseId)?.documents?.find(d => d.id === auditDocId)?.name : "Audit_Document.pdf")} className="text-xs flex items-center gap-1.5 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-3 rounded-md transition-colors"><Download size={14}/> PDF</button>
-                <button onClick={() => handleExportPDF("audit-modal-content", "audit")} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
+                <button onClick={() => handleExportPDF("audit", auditResult, activeCase?.name, [auditDocId])} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
                 <button onClick={() => setShowAuditModal(false)} className="p-1 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-200 transition-colors ml-2"><X size={16} /></button>
               </div>
             </div>
@@ -1758,7 +1785,7 @@ END:VCALENDAR`;
               </h2>
               <div className="flex items-center gap-3">
                 <button onClick={() => executeExpiryExtraction(true)} disabled={isExtractingExpiries} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isExtractingExpiries ? "Scanning..." : "Refresh"}</button>
-                <button onClick={() => handleExportPDF("expiry-modal-content", "expiry_intelligence")} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
+                <button onClick={() => handleExportPDF('expiries', expiryData, activeCase?.name, expiryData?.expiries?.map(e => e.document) || [])} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
                 <button 
                   onClick={() => {
                      if(isExtractingExpiries) {
@@ -1886,7 +1913,7 @@ END:VCALENDAR`;
                 {library.map((doc, i) => (
                     <button key={i} onClick={() => handleDownloadOriginal(doc.id, doc.filename)} className="text-xs flex items-center gap-1.5 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-3 rounded-md transition-colors" title={`Download ${doc.filename}`}><Download size={14}/> PDF {i+1}</button>
                 ))}
-                <button onClick={() => handleExportPDF("timeline-modal-content", "timeline_characters")} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
+                <button onClick={() => handleExportPDF('fundamental_terms', timelineData, activeCase?.name, [])} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
                 <button 
                   onClick={() => {
                      if(isGeneratingTimeline) {
