@@ -122,6 +122,25 @@ async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file:
     from services import ingestion_service
     return await ingestion_service.upload_pdf(workspace_id, background_tasks, file, current_user, x_session_id, db)
 
+@app.get("/api/document/{doc_id}/status")
+def get_document_status(doc_id: str, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    from config import UPLOAD_DIR
+    import os
+    
+    doc = db.query(models.WorkspaceDocument).filter(models.WorkspaceDocument.pinecone_doc_id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    md_path = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.md")
+    md_exists = os.path.exists(md_path)
+    
+    return {
+        "doc_id": doc_id,
+        "filename": doc.filename,
+        "processing": not md_exists,
+        "md_exists": md_exists
+    }
+
 class AuditRequest(BaseModel):
     doc_id: str
     policy: str

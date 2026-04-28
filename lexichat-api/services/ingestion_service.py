@@ -12,30 +12,8 @@ from utils.chunking import smart_chunk
 from services import intelligence_service
 from services import vector_service
 
-async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file: UploadFile, current_user: Optional[models.User], x_session_id: Optional[str], db: Session):
-    firm_id_meta = "none"
-    if current_user:
-        workspace = db.query(models.Workspace).filter(models.Workspace.id == workspace_id, models.Workspace.firm_id == current_user.firm_id).first()
-        firm_id_meta = current_user.firm_id or "none"
-    else:
-        workspace = db.query(models.Workspace).filter(models.Workspace.id == workspace_id, models.Workspace.session_id == x_session_id).first()
-        
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-        
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-    
-    # Generate unique document ID
-    doc_id = str(uuid.uuid4())
-    
-    file.file.seek(0)
-    pdf_bytes = file.file.read()
-    
-    # Save PDF to disk for viewing in React
-    file_path_saved = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
-    with open(file_path_saved, "wb") as f:
-        f.write(pdf_bytes)
+def process_document_background(doc_id: str, file_path_saved: str, filename: str, workspace_id: str, firm_id_meta: str):
+    import time
     
     llama_api_key = os.environ.get("LLAMA_CLOUD_API_KEY")
     chunks_with_meta = []
@@ -70,7 +48,8 @@ async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file:
             with open(os.path.join(UPLOAD_DIR, f"{doc_id}.md"), "w") as f:
                 f.write(full_markdown)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid or corrupted PDF file during fallback extraction. {str(e)}")
+            print(f"Invalid or corrupted PDF file during fallback extraction. {str(e)}")
+            return
             
     else:
         try:
@@ -126,38 +105,69 @@ async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file:
 
         except Exception as e:
             print(f"LlamaParse parsing completely failed: {e}")
-            raise HTTPException(status_code=400, detail=f"LlamaParse document ingestion failed: {str(e)}")
+            return
             
     if not chunks_with_meta:
-        raise HTTPException(status_code=400, detail="Could not extract any text from the document.")
+        print("Could not extract any text from the document.")
+        return
         
     # Embed and store in Pinecone
     vectors_to_upsert = []
-    if chunks_with_meta:
-        texts = [c["text"] for c in chunks_with_meta]
-        try:
-            embeddings = vector_service.get_embeddings(texts)
-            for idx, c_meta in enumerate(chunks_with_meta):
-                vectors_to_upsert.append({
-                    "id": f"{doc_id}_{idx}",
-                    "values": embeddings[idx],
-                    "metadata": {
-                        "doc_id": doc_id,
-                        "filename": file.filename,
-                        "page": c_meta["page"],
-                        "text": c_meta["text"],
-                        "is_global": False,
-                        "jurisdiction": "none",
-                        "firm_id": firm_id_meta
-                    }
-                })
-        except Exception as e:
-            print(f"Embedding error: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to generate and map document vector embeddings. Internal Error: {str(e)}")
+    texts = [c["text"] for c in chunks_with_meta]
+    try:
+        embeddings = vector_service.get_embeddings(texts)
+        for idx, c_meta in enumerate(chunks_with_meta):
+            vectors_to_upsert.append({
+                "id": f"{doc_id}_{idx}",
+                "values": embeddings[idx],
+                "metadata": {
+                    "doc_id": doc_id,
+                    "filename": filename,
+                    "page": c_meta["page"],
+                    "text": c_meta["text"],
+                    "is_global": False,
+                    "jurisdiction": "none",
+                    "firm_id": firm_id_meta
+                }
+            })
+    except Exception as e:
+        print(f"Embedding error: {e}")
+        return
             
     if vectors_to_upsert:
         index.upsert(vectors=vectors_to_upsert)
         
+    # Auto-generate structured document brief securely in the BACKGROUND to drastically cut upload latency
+    sample_text = " ".join([c["text"] for c in chunks_with_meta[:15]])
+    intelligence_service.analyze_document_brief_background(doc_id, filename, sample_text)
+
+
+async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file: UploadFile, current_user: Optional[models.User], x_session_id: Optional[str], db: Session):
+    firm_id_meta = "none"
+    if current_user:
+        workspace = db.query(models.Workspace).filter(models.Workspace.id == workspace_id, models.Workspace.firm_id == current_user.firm_id).first()
+        firm_id_meta = current_user.firm_id or "none"
+    else:
+        workspace = db.query(models.Workspace).filter(models.Workspace.id == workspace_id, models.Workspace.session_id == x_session_id).first()
+        
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+        
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+    
+    # Generate unique document ID
+    doc_id = str(uuid.uuid4())
+    
+    file.file.seek(0)
+    pdf_bytes = file.file.read()
+    
+    # Save PDF to disk for viewing in React
+    file_path_saved = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
+    with open(file_path_saved, "wb") as f:
+        f.write(pdf_bytes)
+
+    # 1. Create DB record immediately
     db_doc = models.WorkspaceDocument(
         id=str(uuid.uuid4()),
         workspace_id=workspace_id,
@@ -167,8 +177,21 @@ async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file:
     db.add(db_doc)
     db.commit()
 
-    # Auto-generate structured document brief securely in the BACKGROUND to drastically cut upload latency
-    sample_text = " ".join([c["text"] for c in chunks_with_meta[:15]])
-    background_tasks.add_task(intelligence_service.analyze_document_brief_background, doc_id, file.filename, sample_text)
+    # 2. Run background task
+    background_tasks.add_task(
+        process_document_background,
+        doc_id=doc_id,
+        file_path_saved=file_path_saved,
+        filename=file.filename,
+        workspace_id=workspace_id,
+        firm_id_meta=firm_id_meta
+    )
 
-    return {"message": "Success", "doc_id": doc_id, "chunks_processed": len(vectors_to_upsert), "filename": file.filename, "brief": None}
+    # 3. Return immediately
+    return {
+        "message": "Upload started",
+        "doc_id": doc_id,
+        "filename": file.filename,
+        "brief": None,
+        "processing": True
+    }

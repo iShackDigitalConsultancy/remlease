@@ -123,6 +123,7 @@ function InnerApp() {
   };
 
   const [isUploading, setIsUploading] = useState(false);
+  const [processingDocs, setProcessingDocs] = useState({});
   const [selectedDocId, setSelectedDocId] = useState(null);
   const [selectedPage, setSelectedPage] = useState(1);
   const [activeJurisdictions, setActiveJurisdictions] = useState([]);
@@ -584,6 +585,32 @@ function InnerApp() {
         setDocBriefs(prev => ({ ...prev, [res.data.doc_id]: res.data.brief }));
       }
       await fetchWorkspaces(); // Refresh the full list securely from db
+
+      if (res.data?.processing && res.data?.doc_id) {
+        setProcessingDocs(prev => ({ ...prev, [res.data.doc_id]: true }));
+        
+        // Start polling
+        let pollCount = 0;
+        const pollInterval = setInterval(async () => {
+          pollCount++;
+          if (pollCount > 24) { // 2 minutes (24 * 5s)
+            clearInterval(pollInterval);
+            setProcessingDocs(prev => ({ ...prev, [res.data.doc_id]: false }));
+            return;
+          }
+          
+          try {
+            const statusRes = await axios.get(`${API_BASE}/document/${res.data.doc_id}/status`, { headers });
+            if (statusRes.data.md_exists) {
+              clearInterval(pollInterval);
+              setProcessingDocs(prev => ({ ...prev, [res.data.doc_id]: false }));
+              await fetchWorkspaces(); // Final refresh
+            }
+          } catch (e) {
+            console.error("Error polling document status", e);
+          }
+        }, 5000);
+      }
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.detail || "Error uploading document.");
@@ -1091,7 +1118,15 @@ END:VCALENDAR`;
                               autoFocus
                           />
                       ) : (
-                          <span className={`text-[13px] font-semibold truncate transition-colors ${selectedDocId === doc.id ? 'text-slate-900' : 'text-slate-600 group-hover:text-slate-900'}`} title={doc.name}>{doc.name}</span>
+                          <div className="flex items-center gap-2 overflow-hidden">
+                              <span className={`text-[13px] font-semibold truncate transition-colors ${selectedDocId === doc.id ? 'text-slate-900' : 'text-slate-600 group-hover:text-slate-900'}`} title={doc.name}>{doc.name}</span>
+                              {processingDocs[doc.id] && (
+                                  <span className="flex items-center gap-1 text-[10px] font-bold text-brand-accent bg-brand-accent/10 px-1.5 py-0.5 rounded-full shrink-0">
+                                      <Loader2 size={10} className="animate-spin" />
+                                      Processing
+                                  </span>
+                              )}
+                          </div>
                       )}
                     </div>
                     <div className="flex items-center">
