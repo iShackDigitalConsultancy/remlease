@@ -314,6 +314,11 @@ If a document is a lease agreement only, set all franchise_terms fields to null.
 franchise_terms.commencement_date: Extract from Annexure A item 7 — do not leave null if the document is a franchise agreement.
 franchise_terms.expiry_date: Calculate from commencement + duration if not explicit.
 
+CRITICAL: The 'document' field in each fundamental_terms entry MUST be the exact filename from the --- DOCUMENT START: filename --- marker found in the input text.
+NEVER write 'filename.pdf' literally.
+NEVER invent a filename.
+Copy it exactly as it appears after 'DOCUMENT START:' in the input.
+
 Return ONLY the raw JSON object.'''
 
     def legacy_op():
@@ -330,7 +335,12 @@ Output ONLY valid JSON matching this exact structure:
 Return one fundamental_terms entry per document.
 Each entry must reflect ONLY the data from that specific document.
 Do not mix lease data with franchise data.
-If a document is a lease only, set all franchise_terms fields to null."""
+If a document is a lease only, set all franchise_terms fields to null.
+
+CRITICAL: The 'document' field in each fundamental_terms entry MUST be the exact filename from the --- DOCUMENT START: filename --- marker found in the input text.
+NEVER write 'filename.pdf' literally.
+NEVER invent a filename.
+Copy it exactly as it appears after 'DOCUMENT START:' in the input."""
         resp = groq_client.chat.completions.create(
             model='llama-3.3-70b-versatile',
             messages=[{'role': 'user', 'content': prompt}],

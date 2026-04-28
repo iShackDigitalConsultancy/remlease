@@ -126,11 +126,16 @@ def build_fundamental_terms_pdf(report_data, workspace_name, document_names) -> 
         lessor = ft.get("lessor", {})
         lessee = ft.get("lessee", {})
         parties_data = [
-            ["Lessor", "Lessee"],
-            [f"Name: {safe(lessor.get('name'))}", f"Name: {safe(lessee.get('name'))}"],
-            [f"Registration: {safe(lessor.get('registration'))}", f"Registration: {safe(lessee.get('registration'))}"],
-            [f"Representative: {safe(lessor.get('representative'))}", f"Representative: {safe(lessee.get('representative'))}"],
-            [f"Domicilium: {safe(lessor.get('domicilium'))}", f"Domicilium: {safe(lessee.get('domicilium'))}"]
+            [Paragraph("<b>Lessor</b>", styles['Normal']),
+             Paragraph("<b>Lessee</b>", styles['Normal'])],
+            [Paragraph(f"<b>Name:</b> {safe(lessor.get('name'))}", styles['Normal']),
+             Paragraph(f"<b>Name:</b> {safe(lessee.get('name'))}", styles['Normal'])],
+            [Paragraph(f"<b>Reg:</b> {safe(lessor.get('registration'))}", styles['Normal']),
+             Paragraph(f"<b>Reg:</b> {safe(lessee.get('registration'))}", styles['Normal'])],
+            [Paragraph(f"<b>Rep:</b> {safe(lessor.get('representative'))}", styles['Normal']),
+             Paragraph(f"<b>Rep:</b> {safe(lessee.get('representative'))}", styles['Normal'])],
+            [Paragraph(f"<b>Dom:</b> {safe(lessor.get('domicilium'))}", styles['Normal']),
+             Paragraph(f"<b>Dom:</b> {safe(lessee.get('domicilium'))}", styles['Normal'])],
         ]
         t = Table(parties_data, colWidths=[9*cm, 9*cm])
         t.setStyle(TableStyle([
@@ -147,15 +152,24 @@ def build_fundamental_terms_pdf(report_data, workspace_name, document_names) -> 
         story.append(Paragraph("<b>Premises & Key Dates</b>", styles['Heading2']))
         premises = ft.get("premises", {})
         premises_data = [
-            ["Premises Description", safe(premises.get("description"))],
-            ["Address", safe(premises.get("address"))],
-            ["ERF", safe(premises.get("erf"))],
-            ["Commencement Date", safe(ft.get("commencement_date"))],
-            ["Expiry Date", safe(ft.get("expiry_date"))],
-            ["Lease Period", safe(ft.get("lease_period"))],
-            ["Renewal Option", safe(ft.get("renewal_option"))],
-            ["Escalation Rate", safe(ft.get("escalation_rate"))],
-            ["Permitted Use", safe(ft.get("permitted_use"))]
+            [Paragraph("<b>Premises Description</b>", styles['Normal']),
+             Paragraph(safe(premises.get("description")), styles['Normal'])],
+            [Paragraph("<b>Address</b>", styles['Normal']),
+             Paragraph(safe(premises.get("address")), styles['Normal'])],
+            [Paragraph("<b>ERF</b>", styles['Normal']),
+             Paragraph(safe(premises.get("erf")), styles['Normal'])],
+            [Paragraph("<b>Commencement Date</b>", styles['Normal']),
+             Paragraph(safe(ft.get("commencement_date")), styles['Normal'])],
+            [Paragraph("<b>Expiry Date</b>", styles['Normal']),
+             Paragraph(safe(ft.get("expiry_date")), styles['Normal'])],
+            [Paragraph("<b>Lease Period</b>", styles['Normal']),
+             Paragraph(safe(ft.get("lease_period")), styles['Normal'])],
+            [Paragraph("<b>Renewal Option</b>", styles['Normal']),
+             Paragraph(safe(ft.get("renewal_option")), styles['Normal'])],
+            [Paragraph("<b>Escalation Rate</b>", styles['Normal']),
+             Paragraph(safe(ft.get("escalation_rate")), styles['Normal'])],
+            [Paragraph("<b>Permitted Use</b>", styles['Normal']),
+             Paragraph(safe(ft.get("permitted_use")), styles['Normal'])]
         ]
         t2 = Table(premises_data, colWidths=[6*cm, 12*cm])
         t2.setStyle(TableStyle([
@@ -172,14 +186,16 @@ def build_fundamental_terms_pdf(report_data, workspace_name, document_names) -> 
         rental_sched = ft.get("rental_schedule", [])
         if rental_sched:
             story.append(Paragraph("<b>Rental Schedule</b>", styles['Heading2']))
-            rs_data = [["Period", "Monthly Amount", "Notes"]]
+            rs_data = [
+                [Paragraph("<b>Period</b>", styles['Normal']),
+                 Paragraph("<b>Monthly Amount</b>", styles['Normal']),
+                 Paragraph("<b>Notes</b>", styles['Normal'])]
+            ]
             for rs in rental_sched:
                 rs_data.append([
-                    safe(rs.get("period")),
-                    safe(rs.get("amount") or 
-                         rs.get("monthly_amount")),
-                    safe(rs.get("note") or 
-                         rs.get("notes"))
+                    Paragraph(safe(rs.get("period")), styles['Normal']),
+                    Paragraph(safe(rs.get("amount") or rs.get("monthly_amount")), styles['Normal']),
+                    Paragraph(safe(rs.get("note") or rs.get("notes")), styles['Normal'])
                 ])
             
             t3 = Table(rs_data, colWidths=[6*cm, 5*cm, 7*cm])
@@ -206,11 +222,11 @@ def build_fundamental_terms_pdf(report_data, workspace_name, document_names) -> 
         if franchise:
             story.append(Paragraph("<b>Franchise Terms</b>", styles['Heading2']))
             f_data = [
-                ["Commencement", safe(franchise.get("commencement_date"))],
-                ["Expiry", safe(franchise.get("expiry_date"))],
-                ["Term", safe(franchise.get("term_length"))],
-                ["Upfront Fee", safe(franchise.get("upfront_license_fee"))],
-                ["Fees", safe(franchise.get("monthly_franchise_fee"))]
+                [Paragraph("<b>Commencement</b>", styles['Normal']), Paragraph(safe(franchise.get("commencement_date")), styles['Normal'])],
+                [Paragraph("<b>Expiry</b>", styles['Normal']), Paragraph(safe(franchise.get("expiry_date")), styles['Normal'])],
+                [Paragraph("<b>Term</b>", styles['Normal']), Paragraph(safe(franchise.get("term_length")), styles['Normal'])],
+                [Paragraph("<b>Upfront Fee</b>", styles['Normal']), Paragraph(safe(franchise.get("upfront_license_fee")), styles['Normal'])],
+                [Paragraph("<b>Fees</b>", styles['Normal']), Paragraph(safe(franchise.get("monthly_franchise_fee")), styles['Normal'])]
             ]
             t4 = Table(f_data, colWidths=[6*cm, 12*cm])
             t4.setStyle(TableStyle([
