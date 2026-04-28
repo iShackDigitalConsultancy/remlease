@@ -235,9 +235,27 @@ async def get_document(doc_id: str, current_user: Optional[models.User] = Depend
     if not doc:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    file_path = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.pdf")
-    if os.path.exists(file_path):
-        return FileResponse(file_path, media_type="application/pdf")
-    raise HTTPException(status_code=404, detail="Document not found, it may have been deleted.")
+    candidate_ids = list(dict.fromkeys(filter(None, [
+        doc.pinecone_doc_id,
+        doc.id,
+    ])))
+
+    file_path = None
+    for candidate_id in candidate_ids:
+        candidate_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.pdf")
+        if os.path.exists(candidate_path):
+            file_path = candidate_path
+            break
+
+    if file_path:
+        return FileResponse(
+            file_path,
+            media_type="application/pdf",
+            filename=doc.filename or f"{doc.id}.pdf"
+        )
+    raise HTTPException(
+        status_code=404,
+        detail="Source PDF not available. Please re-upload the document."
+    )
 
 

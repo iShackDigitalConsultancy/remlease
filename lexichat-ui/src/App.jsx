@@ -68,7 +68,14 @@ function InnerApp() {
       
       const baseURL = `${API_BASE.replace('/api', '')}/api/document/${docId}`;
       const res = await fetch(baseURL, { headers });
+      
+      if (res.status === 404) {
+        alert("Source PDF not available for this document. Please delete and re-upload it to enable PDF download.");
+        return;
+      }
+      
       if (!res.ok) throw new Error(`Failed to download: ${res.status}`);
+      
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
