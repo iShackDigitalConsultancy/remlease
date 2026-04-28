@@ -2124,6 +2124,8 @@ END:VCALENDAR`;
                              <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div><span className="text-slate-500">Bank:</span> <span className="font-medium">{safeStr(termData?.payment_details?.bank)}</span></div>
                                 <div><span className="text-slate-500">Branch:</span> <span className="font-medium">{safeStr(termData?.payment_details?.branch)}</span></div>
+                                <div><span className="text-slate-500">Branch Code:</span> <span className="font-medium">{safeStr(termData?.payment_details?.branch_code)}</span></div>
+                                <div><span className="text-slate-500">Acc Holder:</span> <span className="font-medium">{safeStr(termData?.payment_details?.account_holder)}</span></div>
                                 <div><span className="text-slate-500">Account:</span> <span className="font-medium">{safeStr(termData?.payment_details?.account_number)}</span></div>
                                 <div><span className="text-slate-500">Type:</span> <span className="font-medium">{safeStr(termData?.payment_details?.account_type)}</span></div>
                              </div>
