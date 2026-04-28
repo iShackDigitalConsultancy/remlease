@@ -54,7 +54,7 @@ def build_expiries_pdf(report_data, workspace_name, document_names) -> BytesIO:
         
         data = [
             ["Commencement", "Expiry Date", "Renewal Deadline"],
-            [item.get("commencement", "-"), item.get("expiry_date", "-"), item.get("renewal_deadline", "-")]
+            [item.get("commencement_date", "-"), item.get("expiry_date", "-"), item.get("renewal_deadline", "-")]
         ]
         t = Table(data, colWidths=[5*cm, 5*cm, 5*cm])
         t.setStyle(TableStyle([
