@@ -696,132 +696,63 @@ Return ONLY valid JSON."""
 
 
 async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    from datetime import datetime
     if current_user:
-        docs = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
-            models.Workspace.firm_id == current_user.firm_id
-        ).all()
+        workspaces = db.query(models.Workspace).filter(models.Workspace.firm_id == current_user.firm_id).all()
     elif x_session_id:
-        docs = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
-            models.Workspace.session_id == x_session_id
-        ).all()
+        workspaces = db.query(models.Workspace).filter(models.Workspace.session_id == x_session_id).all()
     else:
         raise HTTPException(status_code=401, detail="Authentication required")
         
-    if not docs:
-        return {"data": []}
+    final_data = []
+    
+    for ws in workspaces:
+        cache_path = os.path.join(UPLOAD_DIR, f"{ws.id}_extract_expiries.json")
+        ws_summary = {
+            "workspace_id": str(ws.id),
+            "workspace_name": ws.name,
+            "documents": [],
+            "property_location": None,
+            "parties": [],
+            "cache_available": False,
+            "last_scanned": None
+        }
         
-    full_text = ""
-    example_objects = []
-    # Process up to 10 documents, taking 6000 characters each to avoid heavy context limits.
-    for doc in docs[:10]:
-        found_text = False
-        for candidate_id in [getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
-            if not candidate_id: continue
-            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
-            if os.path.exists(file_path):
-                try:
-                    with open(file_path, "r") as f:
-                        doc_text = f.read()
-                    full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
-                    found_text = True
-                    break
-                except Exception as e:
-                    pass
-        
-        if found_text:
-            example_objects.append(f"""  {{
-    "filename": "{doc.filename}",
-    "doc_type": "Lease OR Franchise Agreement OR Unknown",
-    "expiry_date": "YYYY-MM-DD",
-    "renewal_deadline": "YYYY-MM-DD",
-    "key_terms": "1-sentence summary of the most important term or permitted use",
-    "flags": "Any major risks, unusual clauses or Management Alerts",
-    "property_location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [{{"role": "Landlord/etc", "name": "Entity Name"}}],
-    "obligations_summary": {{"financial": "String", "operational": "String"}}
-  }}""")
+        if os.path.exists(cache_path):
+            try:
+                ws_summary["cache_available"] = True
+                ws_summary["last_scanned"] = datetime.fromtimestamp(os.path.getmtime(cache_path)).isoformat()
+                with open(cache_path, "r") as f:
+                    cached = json.load(f)
                 
-    if not full_text:
-        return {"data": []}
-
-    example_json_array = "[\n" + ",\n".join(example_objects) + "\n]"
-
-    map_task = "Extract key financial terms, parties, and material obligations from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., party names, and a summary of financial and operational obligations."
-    reduce_task = f"""Produce a portfolio dashboard of key terms across all documents. Flag documents where extraction confidence was low.
-Output exactly this JSON structure as an array of objects:
-{example_json_array}
-Ensure the JSON is perfectly valid and is just the array. Ensure you include EVERY specific document listed in the text."""
+                doc_context = cached.get("document_context", {})
+                ws_summary["property_location"] = doc_context.get("location")
+                ws_summary["parties"] = doc_context.get("parties", [])
+                
+                expiries = cached.get("expiries", [])
+                for exp in expiries:
+                    doc_name = str(exp.get("document", ""))
+                    doc_type = "Franchise Agreement" if "franchise" in doc_name.lower() or "fa " in doc_name.lower() else "Lease Agreement"
+                    
+                    ws_summary["documents"].append({
+                        "filename": doc_name,
+                        "doc_type": doc_type,
+                        "commencement_date": exp.get("commencement_date"),
+                        "expiry_date": exp.get("expiry_date"),
+                        "renewal_deadline": exp.get("renewal_deadline"),
+                        "renewal_option_period": exp.get("renewal_option_period"),
+                        "action_required": exp.get("action_required")
+                    })
+            except Exception as e:
+                print(f"Error reading cache for workspace {ws.id}: {e}")
+                
+        final_data.append(ws_summary)
 
     async def generate_response():
-        use_map_reduce = os.environ.get("USE_MAP_REDUCE", "False").lower() in ("true", "1", "yes")
-        
-        if use_map_reduce:
-            from services.map_reduce import run_map_reduce_stream
-            final = None
-            async for chunk in run_map_reduce_stream(full_text, map_task, reduce_task):
-                if '"status": "complete"' in chunk:
-                    try:
-                        obj = json.loads(chunk[6:])
-                        final = obj.get("data", [])
-                    except:
-                        final = []
-                else:
-                    yield chunk
-                    
-            if final is not None:
-                for item in final:
-                    matched_doc = next((d for d in docs if d.filename == item.get("filename")), None)
-                    if matched_doc:
-                        item["workspace_id"] = getattr(matched_doc, "workspace_id", None)
-                        item["doc_id"] = getattr(matched_doc, "id", None)
-                yield f"data: {json.dumps({'status': 'complete', 'data': final})}\n\n"
-        else:
-            yield f"data: {json.dumps({'status': 'processing', 'message': 'Analysing document (Legacy Mode)...'})}\n\n"
-            
-            # Legacy logic
-            legacy_text = ""
-            for doc in docs[:10]:
-                fp = os.path.join(UPLOAD_DIR, f"{doc.pinecone_doc_id}.md")
-                if not os.path.exists(fp):
-                    fp = os.path.join(UPLOAD_DIR, f"{doc.id}.md")
-                if os.path.exists(fp):
-                    with open(fp, "r") as f:
-                        t = f.read()
-                    legacy_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{str(t)[:6000]}\n"
-                    
-            prompt = f"""You are an expert commercial leasing manager. Review the following portfolio of lease and franchise agreements.
-For each document provided, extract the critical terms for a global management dashboard.
-
-DOCUMENTS TEXT:
-{legacy_text}
-
-INSTRUCTIONS:
-Output exactly this JSON structure as an array of objects:
-{example_json_array}
-Ensure the JSON is perfectly valid and is just the array. Do not output anything else.
-Ensure you include EVERY specific document listed in the text."""
-            try:
-                resp = groq_client.chat.completions.create(
-                    model='llama-3.3-70b-versatile',
-                    messages=[{'role': 'user', 'content': prompt}],
-                    temperature=0.0,
-                    max_tokens=4000
-                )
-                raw = resp.choices[0].message.content.strip()
-                raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
-                result = json.loads(raw)
-                
-                for item in result:
-                    matched_doc = next((d for d in docs if d.filename == item.get("filename")), None)
-                    if matched_doc:
-                        item["workspace_id"] = getattr(matched_doc, "workspace_id", None)
-                        item["doc_id"] = getattr(matched_doc, "id", None)
-                        
-                yield f"data: {json.dumps({'status': 'complete', 'data': result})}\n\n"
-            except Exception as e:
-                yield f"data: {json.dumps({'status': 'error', 'message': 'Failed to analyse portfolio'})}\n\n"
+        yield f"data: {json.dumps({'status': 'complete', 'data': final_data})}\n\n"
 
     return StreamingResponse(generate_response(), media_type="text/event-stream")
+
 
 
 

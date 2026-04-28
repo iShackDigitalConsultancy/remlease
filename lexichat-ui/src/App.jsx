@@ -1358,74 +1358,96 @@ END:VCALENDAR`;
                       <p className="text-sm mt-2 text-slate-500 max-w-sm text-center">Llama 3 is reading through all agreements across your platform to map expiry dates and critical terms collectively.</p>
                   </div>
                ) : portfolioData && portfolioData.length > 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                     <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse min-w-[800px]">
-                           <thead>
-                              <tr className="bg-slate-100 border-b border-slate-200 uppercase text-[10px] font-black text-slate-500 tracking-wider">
-                                  <th className="p-4">Document</th>
-                                  <th className="p-4">Key Dates</th>
-                                  <th className="p-4 min-w-[250px]">Primary Terms Overview</th>
-                                  <th className="p-4 min-w-[200px]">Management Flags</th>
-                              </tr>
-                           </thead>
-                           <tbody className="divide-y divide-slate-100">
-                              {portfolioData.map((doc, idx) => (
-                                 <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
-                                     <td className="p-4 align-top w-64 max-w-[250px] break-words">
-                                         <button 
-                                             onClick={() => {
-                                                 if (doc.workspace_id) {
-                                                     setActiveCaseId(doc.workspace_id);
-                                                     setActiveView('workspace');
-                                                     setSelectedDocId(doc.doc_id);
-                                                 }
-                                             }}
-                                             className="font-bold text-sm text-brand-blue hover:text-brand-blue-dark hover:underline leading-tight text-left flex items-start gap-1 group w-full"
-                                             title="View Source Document"
-                                         >
-                                            <span className="line-clamp-2">{doc.filename}</span>
-                                            <ExternalLink size={12} className="shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                         </button>
-                                         <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${doc.doc_type?.toLowerCase().includes('franchise') ? 'bg-brand-blue/10 text-brand-blue' : 'bg-slate-100 text-slate-600'}`}>
-                                            {doc.doc_type || 'Unknown'}
-                                         </span>
-                                         <button 
-                                            onClick={() => handleDownloadOriginal(doc.doc_id, doc.filename)} 
-                                            className="mt-2 text-[10px] flex w-max items-center gap-1 bg-brand-blue/5 hover:bg-brand-blue/15 text-brand-blue py-1 px-2 rounded transition-colors"
-                                            title="Download Original PDF"
-                                         >
-                                            <Download size={10} /> Download PDF
-                                         </button>
-                                     </td>
-                                     <td className="p-4 align-top space-y-3 whitespace-nowrap">
-                                         <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
-                                            <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Expiry Date</span>
-                                            <span className="font-bold text-sm text-slate-800">{doc.expiry_date || "N/A"}</span>
-                                         </div>
-                                         <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
-                                            <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Renewal Deadline</span>
-                                            <span className="font-semibold text-xs text-brand-accent">{doc.renewal_deadline || "N/A"}</span>
-                                         </div>
-                                     </td>
-                                     <td className="p-4 align-top">
-                                         <p className="text-sm text-slate-700 leading-relaxed font-medium line-clamp-4 hover:line-clamp-none transition-all">{doc.key_terms}</p>
-                                     </td>
-                                     <td className="p-4 align-top">
-                                         {doc.flags && doc.flags.toLowerCase() !== 'none' && doc.flags.toLowerCase() !== 'not applicable' && doc.flags.toLowerCase() !== 'n/a' ? (
-                                            <div className="bg-amber-50/50 border border-amber-200 p-3 rounded-xl flex gap-2">
-                                                <ShieldAlert size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                                                <p className="text-xs font-semibold text-amber-900/80 leading-relaxed">{doc.flags}</p>
-                                            </div>
-                                         ) : (
-                                            <p className="text-xs text-slate-400 font-medium italic bg-slate-50 border border-slate-100 p-2 rounded-lg text-center">No flags detected</p>
-                                         )}
-                                     </td>
-                                 </tr>
-                              ))}
-                           </tbody>
-                        </table>
-                     </div>
+                  <div className="space-y-6">
+                      {portfolioData.map((ws, wsIdx) => (
+                         <div key={wsIdx} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                             <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                 <div>
+                                     <h2 className="text-lg font-black text-slate-800">{ws.workspace_name}</h2>
+                                     {ws.property_location && (
+                                         <p className="text-sm font-medium text-slate-500 flex items-center gap-1 mt-1">
+                                             <MapPin size={14} className="text-slate-400" />
+                                             {ws.property_location}
+                                         </p>
+                                     )}
+                                 </div>
+                                 <button 
+                                     onClick={() => {
+                                         setActiveCaseId(ws.workspace_id);
+                                         setActiveView('workspace');
+                                     }}
+                                     className="text-sm font-bold text-brand-blue hover:text-brand-blue-dark hover:underline"
+                                 >
+                                     Open Workspace &rarr;
+                                 </button>
+                             </div>
+                             
+                             {!ws.cache_available ? (
+                                 <div className="p-8 flex items-center justify-center text-center">
+                                     <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl max-w-md">
+                                         <ShieldAlert size={24} className="text-amber-500 mx-auto mb-2" />
+                                         <p className="text-amber-900 font-bold mb-1">Not yet scanned</p>
+                                         <p className="text-amber-700/80 text-sm">Run Scan Expiries/Renewals in this workspace to populate the dashboard.</p>
+                                     </div>
+                                 </div>
+                             ) : (
+                                 <div className="overflow-x-auto">
+                                     <table className="w-full text-left border-collapse min-w-[800px]">
+                                         <thead>
+                                            <tr className="bg-slate-100/50 border-b border-slate-200 uppercase text-[10px] font-black text-slate-500 tracking-wider">
+                                                <th className="p-4">Document</th>
+                                                <th className="p-4">Key Dates</th>
+                                                <th className="p-4">Renewal Details</th>
+                                                <th className="p-4 min-w-[200px]">Action Required</th>
+                                            </tr>
+                                         </thead>
+                                         <tbody className="divide-y divide-slate-100">
+                                            {ws.documents.map((doc, docIdx) => {
+                                                const expDate = doc.expiry_date ? new Date(doc.expiry_date) : null;
+                                                const isUrgent = expDate && (expDate.getTime() - new Date().getTime()) < (365 * 24 * 60 * 60 * 1000);
+                                                
+                                                return (
+                                               <tr key={docIdx} className="hover:bg-slate-50/50 transition-colors">
+                                                   <td className="p-4 align-top w-64 max-w-[250px] break-words">
+                                                       <span className="font-bold text-sm text-slate-800 leading-tight block">{doc.filename}</span>
+                                                       <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${doc.doc_type?.toLowerCase().includes('franchise') ? 'bg-brand-blue/10 text-brand-blue' : 'bg-slate-100 text-slate-600'}`}>
+                                                          {doc.doc_type || 'Unknown'}
+                                                       </span>
+                                                   </td>
+                                                   <td className="p-4 align-top space-y-3 whitespace-nowrap">
+                                                       <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
+                                                          <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Commencement</span>
+                                                          <span className="font-bold text-sm text-slate-800">{doc.commencement_date || "N/A"}</span>
+                                                       </div>
+                                                       <div className={`border rounded-lg p-2 shadow-sm ${isUrgent ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
+                                                          <span className={`block text-[9px] uppercase font-bold mb-0.5 ${isUrgent ? 'text-red-500' : 'text-slate-400'}`}>Expiry Date</span>
+                                                          <span className={`font-bold text-sm ${isUrgent ? 'text-red-700' : 'text-slate-800'}`}>{doc.expiry_date || "N/A"}</span>
+                                                       </div>
+                                                   </td>
+                                                   <td className="p-4 align-top space-y-3 whitespace-nowrap">
+                                                       <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
+                                                          <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Renewal Deadline</span>
+                                                          <span className="font-semibold text-xs text-brand-accent">{doc.renewal_deadline || "N/A"}</span>
+                                                       </div>
+                                                       <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
+                                                          <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Option Period</span>
+                                                          <span className="font-semibold text-xs text-slate-700">{doc.renewal_option_period || "None stated"}</span>
+                                                       </div>
+                                                   </td>
+                                                   <td className="p-4 align-top">
+                                                       <div className="bg-amber-50/50 border border-amber-200 p-3 rounded-xl flex gap-2">
+                                                           <BellRing size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                                                           <p className="text-xs font-semibold text-amber-900/80 leading-relaxed">{doc.action_required || "No specific action flagged."}</p>
+                                                       </div>
+                                                   </td>
+                                               </tr>
+                                            )})}
+                                         </tbody>
+                                     </table>
+                                 </div>
+                             )}
+                         </div>
+                      ))}
                   </div>
                ) : (
                   <div className="text-center p-12 bg-white border border-slate-200 rounded-2xl shadow-sm">
