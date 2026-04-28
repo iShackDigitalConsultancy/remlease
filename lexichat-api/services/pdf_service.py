@@ -152,7 +152,13 @@ def build_fundamental_terms_pdf(report_data, workspace_name, document_names) -> 
         story.append(Paragraph("<b>Rental Schedule</b>", styles['Heading2']))
         rs_data = [["Period", "Monthly Amount", "Notes"]]
         for rs in rental_sched:
-            rs_data.append([safe(rs.get("period")), safe(rs.get("monthly_amount")), safe(rs.get("notes"))])
+            rs_data.append([
+                safe(rs.get("period")),
+                safe(rs.get("amount") or 
+                     rs.get("monthly_amount")),
+                safe(rs.get("note") or 
+                     rs.get("notes"))
+            ])
             
         t3 = Table(rs_data, colWidths=[6*cm, 5*cm, 7*cm])
         t3.setStyle(TableStyle([
