@@ -245,6 +245,7 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
         raise HTTPException(status_code=400, detail="No documents selected")
         
     full_text: str = ""
+    workspace_id = None
     for doc_id in payload.doc_ids:
         # Verify access
         if current_user is not None:
@@ -261,6 +262,9 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
         if not doc:
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
             
+        if workspace_id is None:
+            workspace_id = str(doc.workspace_id)
+            
         for candidate_id in [doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
             if not candidate_id: continue
             file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
@@ -273,6 +277,9 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
                 except Exception as e:
                     print(f"Failed to read {file_path}: {e}")
                 
+    if not workspace_id:
+        workspace_id = payload.doc_ids[0]
+
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
