@@ -1867,12 +1867,33 @@ END:VCALENDAR`;
                                   <Clock size={16} className="opacity-70"/> {exp.commencement_date || "Not Specified"}
                                 </div>
                              </div>
+                             
+                             {exp.beneficial_occupation_date && exp.beneficial_occupation_date !== 'null' && (
+                              <div className="pt-2 border-t border-slate-100">
+                                <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">
+                                  Beneficial Occupation</p>
+                                <p className="text-sm font-medium text-slate-800 flex items-center gap-1">
+                                  <Clock size={13} className="text-slate-400" />
+                                  {exp.beneficial_occupation_date}
+                                </p>
+                              </div>
+                             )}
+
                              <div className="pt-2 border-t border-slate-100">
                                 <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Expiration Date</span>
                                 <div className="text-xl font-black text-brand-accent flex items-center gap-2">
                                   <Clock size={18} className="opacity-80"/> {exp.expiry_date || "Not Specified"}
                                 </div>
                              </div>
+
+                             {exp.renewal_option_period && exp.renewal_option_period !== 'null' && (
+                              <div className="pt-2 border-t border-slate-100">
+                                <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Renewal Option</p>
+                                <p className="text-sm font-medium text-slate-800">
+                                  {exp.renewal_option_period}
+                                </p>
+                              </div>
+                             )}
                              <div>
                                 <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Renewal Deadline</span>
                                 <div className="text-md font-bold text-slate-700">

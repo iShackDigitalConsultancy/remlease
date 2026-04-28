@@ -444,7 +444,10 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     example_expiries = ",\n    ".join([
     '{\n      "document": "' + fname + '",\n'
     '      "commencement_date": "YYYY-MM-DD",\n'
+    '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
     '      "expiry_date": "YYYY-MM-DD",\n'
+    '      "lease_end_date": "YYYY-MM-DD",\n'
+    '      "renewal_option_period": "e.g. 1 x 5 years or null",\n'
     '      "renewal_deadline": "YYYY-MM-DD",\n'
     '      "clause": "Governing clause text",\n'
     '      "clause_reference": "e.g. 12.1",\n'
@@ -454,7 +457,10 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
 ]) if filenames else (
     '{\n      "document": "contract.pdf",\n'
     '      "commencement_date": "YYYY-MM-DD",\n'
+    '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
     '      "expiry_date": "YYYY-MM-DD",\n'
+    '      "lease_end_date": "YYYY-MM-DD",\n'
+    '      "renewal_option_period": "e.g. 1 x 5 years or null",\n'
     '      "renewal_deadline": "YYYY-MM-DD",\n'
     '      "clause": "Governing clause text",\n'
     '      "clause_reference": "e.g. 12.1",\n'
@@ -462,8 +468,16 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     '    }'
 )
 
-    map_task = "Extract all dates, terms, deadlines, and renewal notice periods from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., all party names and roles, and any material obligations found in this section."
+    map_task = "Extract all dates, deadlines, and timeframes from this section. You MUST extract ALL of these specific fields if present:\n1. Commencement Date — when the lease/agreement starts\n2. Beneficial Occupation Date — when tenant gets early access\n3. Expiry Date / Lease End Date — when it ends\n4. Renewal Option Period — e.g. 1 x 5 years or 2 x 3 years\n5. Renewal Notice Deadline — last date to notify of renewal intent\n6. For FRANCHISE AGREEMENTS specifically extract Annexure A item 7 (Commencement Date) and item 8 (Duration/Period)\nAlso extract: physical store/shop premises address only (shop number and street, not head office), all party names and roles, and the governing clause for each date found."
     reduce_task = f"""You MUST produce a SEPARATE expiry entry for EACH document marked with --- DOCUMENT START ---.
+For each document entry you MUST populate:
+- commencement_date (never leave null if the document has a start date)
+- beneficial_occupation_date (null if absent)
+- expiry_date (never leave null)
+- lease_end_date (same as expiry_date if not separately stated)
+- renewal_option_period (e.g. 1 x 5 years, null if none)
+- renewal_deadline (calculate as 6 months before expiry if clause states 6 month notice period)
+For FRANCHISE AGREEMENTS: commencement from Annexure A item 7, expiry = commencement + item 8 duration.
 Do NOT copy or duplicate dates across entries.
 Each document has different dates:
 - For a FRANCHISE AGREEMENT: commencement date is in Annexure A item 7, expiry = commencement plus duration from item 8
