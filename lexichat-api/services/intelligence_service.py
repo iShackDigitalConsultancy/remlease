@@ -277,28 +277,14 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
     map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, payment/banking details, renewal options, special conditions, and suretyship details. If the document uses a PREAMBLE or numbered clause format instead of a schedule table, extract the same information from those sections. Look for LESSOR/LESSEE definitions, PREMISES description in clause 1, COMMENCEMENT DATE in clause 3, EXPIRY DATE in clause 3, BASIC MONTHLY RENTAL in clause 4 tables, DEPOSITS in clause 8, SPECIAL CONDITIONS in clause 16. For franchise agreements, the COMMENCEMENT DATE is explicitly stated in Annexure A under 'FINANCIAL AND OTHER TERMS' as item 7 'Commencement Date'. The EXPIRY DATE must be calculated as commencement date plus duration (item 8). The DURATION is typically stated as 'X years from Commencement Date'. Extract these values precisely."
-    fundamental_terms_schema = '''{
+    fundamental_terms_schema = """{
   "fundamental_terms": [
     {
       "document": "filename.pdf",
       "doc_type": "Lease Agreement or Franchise Agreement",
-      "lessor": {
-        "name": "string",
-        "registration": "string",
-        "representative": "string",
-        "domicilium": "string"
-      },
-      "lessee": {
-        "name": "string",
-        "registration": "string", 
-        "representative": "string",
-        "domicilium": "string"
-      },
-      "premises": {
-        "description": "string",
-        "address": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-        "erf": "string"
-      },
+      "lessor": {"name": "string", "registration": "string", "representative": "string", "domicilium": "string"},
+      "lessee": {"name": "string", "registration": "string", "representative": "string", "domicilium": "string"},
+      "premises": {"description": "string", "address": "string", "erf": "string"},
       "lease_period": "string",
       "commencement_date": "YYYY-MM-DD",
       "expiry_date": "YYYY-MM-DD",
@@ -307,38 +293,15 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
       "escalation_rate": "string",
       "permitted_use": "string",
       "security_deposit": "string",
-      "rental_schedule": [
-        {
-          "period": "YYYY-MM-DD to YYYY-MM-DD",
-          "amount": "R X,XXX.XX per month",
-          "note": "optional note"
-        }
-      ],
-      "trading_hours": {
-        "monday_thursday": "string",
-        "friday": "string",
-        "saturday": "string",
-        "sunday_public_holidays": "string"
-      },
-      "payment_details": {
-        "bank": "string",
-        "branch": "string",
-        "account_number": "string",
-        "account_type": "string"
-      },
-      "special_conditions": ["string array"],
+      "rental_schedule": [{"period": "string", "amount": "string", "note": "string"}],
+      "trading_hours": {"monday_thursday": "string", "friday": "string", "saturday": "string", "sunday_public_holidays": "string"},
+      "payment_details": {"bank": "string", "branch": "string", "account_number": "string", "account_type": "string"},
+      "special_conditions": ["string"],
       "suretyship": "string or null",
-      "franchise_terms": {
-        "commencement_date": "YYYY-MM-DD or null",
-        "expiry_date": "YYYY-MM-DD or null",
-        "term_length": "string or null",
-        "renewal_option": "string or null",
-        "upfront_license_fee": "string or null",
-        "monthly_franchise_fee": "string or null"
-      }
+      "franchise_terms": {"commencement_date": "YYYY-MM-DD or null", "expiry_date": "YYYY-MM-DD or null", "term_length": "string or null", "renewal_option": "string or null", "upfront_license_fee": "string or null", "monthly_franchise_fee": "string or null"}
     }
   ]
-}'''
+}"""
 
     reduce_task = f'''Produce a comprehensive summary of all fundamental lease terms.
 JSON SCHEMA REQUIREMENT:
@@ -355,7 +318,7 @@ Return ONLY the raw JSON object.'''
 
     def legacy_op():
         old_full_text = str(full_text)[:18000]
-        prompt = f'''You are a master commercial real estate attorney. Extract the fundamental terms of the provided lease or franchise agreement.
+        prompt = f"""You are a master commercial real estate attorney. Extract the fundamental terms of the provided lease or franchise agreement.
 
 DOCUMENTS TEXT:
 {old_full_text}
@@ -364,14 +327,10 @@ INSTRUCTIONS:
 Output ONLY valid JSON matching this exact structure:
 {fundamental_terms_schema}
 
-Return one fundamental_terms entry per document. Each entry must reflect ONLY the data from that specific document.
-Do not mix lease data with franchise data. The document field must match the filename from the --- DOCUMENT START --- marker.
-
-If a document is a lease agreement only, set all franchise_terms fields to null.
-franchise_terms.commencement_date: Extract from Annexure A item 7 — do not leave null if the document is a franchise agreement.
-franchise_terms.expiry_date: Calculate from commencement + duration if not explicit.
-
-Return ONLY the raw JSON object.'''
+Return one fundamental_terms entry per document.
+Each entry must reflect ONLY the data from that specific document.
+Do not mix lease data with franchise data.
+If a document is a lease only, set all franchise_terms fields to null."""
         resp = groq_client.chat.completions.create(
             model='llama-3.3-70b-versatile',
             messages=[{'role': 'user', 'content': prompt}],
