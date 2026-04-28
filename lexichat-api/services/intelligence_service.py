@@ -276,7 +276,7 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
     if not full_text:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
-    map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, payment/banking details, renewal options, special conditions, and suretyship details. If the document uses a PREAMBLE or numbered clause format instead of a schedule table, extract the same information from those sections. Look for LESSOR/LESSEE definitions, PREMISES description in clause 1, COMMENCEMENT DATE in clause 3, EXPIRY DATE in clause 3, BASIC MONTHLY RENTAL in clause 4 tables, DEPOSITS in clause 8, SPECIAL CONDITIONS in clause 16. For franchise agreements, the COMMENCEMENT DATE is explicitly stated in Annexure A under 'FINANCIAL AND OTHER TERMS' as item 7 'Commencement Date'. The EXPIRY DATE must be calculated as commencement date plus duration (item 8). The DURATION is typically stated as 'X years from Commencement Date'. Extract these values precisely."
+    map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, Extract banking/payment details including: bank name, branch name, branch code, account number, account type, and account holder name., renewal options, special conditions, and suretyship details. If the document uses a PREAMBLE or numbered clause format instead of a schedule table, extract the same information from those sections. Look for LESSOR/LESSEE definitions, PREMISES description in clause 1, COMMENCEMENT DATE in clause 3, EXPIRY DATE in clause 3, BASIC MONTHLY RENTAL in clause 4 tables, DEPOSITS in clause 8, SPECIAL CONDITIONS in clause 16. For FRANCHISE AGREEMENTS specifically: - Extract Annexure A 'Financial and Other Terms' - Item 1: Upfront License Fee amount - Item 2: Franchise Fee percentage - Item 3: Renewal Fee - Item 4: Marketing Fee percentage - Item 7: Commencement Date - Item 8: Duration/Period - Item 10: Premises/Location Calculate expiry = commencement + duration"
     fundamental_terms_schema = """{
   "fundamental_terms": [
     {
@@ -295,10 +295,17 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
       "security_deposit": "string",
       "rental_schedule": [{"period": "string", "amount": "string", "note": "string"}],
       "trading_hours": {"monday_thursday": "string", "friday": "string", "saturday": "string", "sunday_public_holidays": "string"},
-      "payment_details": {"bank": "string", "branch": "string", "account_number": "string", "account_type": "string"},
+      "payment_details": {
+        "bank": "string",
+        "branch": "string", 
+        "branch_code": "string",
+        "account_holder": "string",
+        "account_number": "string",
+        "account_type": "string"
+      },
       "special_conditions": ["string"],
-      "suretyship": "string or null",
-      "franchise_terms": {"commencement_date": "YYYY-MM-DD or null", "expiry_date": "YYYY-MM-DD or null", "term_length": "string or null", "renewal_option": "string or null", "upfront_license_fee": "string or null", "monthly_franchise_fee": "string or null"}
+      "suretyship": "Must be a plain text string describing the surety arrangement. Example: 'Cornelius Gerhard Lotriet, ID/Reg 2023/608635/07' NEVER return suretyship as a JSON object. Flatten all surety details into one sentence.",
+      "franchise_terms": {"commencement_date": "YYYY-MM-DD or null", "expiry_date": "YYYY-MM-DD or null", "term_length": "string or null", "renewal_option": "string or null", "upfront_license_fee": "string or null", "monthly_franchise_fee": "string or null", "renewal_fee": "string or null", "marketing_fee": "string or null"}
     }
   ]
 }"""
@@ -311,8 +318,14 @@ Return one fundamental_terms entry per document. Each entry must reflect ONLY th
 Do not mix lease data with franchise data. The document field must match the filename from the --- DOCUMENT START --- marker.
 
 If a document is a lease agreement only, set all franchise_terms fields to null.
-franchise_terms.commencement_date: Extract from Annexure A item 7 — do not leave null if the document is a franchise agreement.
-franchise_terms.expiry_date: Calculate from commencement + duration if not explicit.
+For franchise agreements, Annexure A contains the Financial and Other Terms.
+Item 7 is the Commencement Date — extract it.
+Item 8 is the Duration — use it to calculate expiry date.
+Item 1 is the Upfront License Fee — extract the exact rand amount.
+Item 2 is the Franchise Fee — extract the exact percentage.
+These are CRITICAL fields — do not leave them null if the document is a franchise agreement.
+
+If the document is a LEASE AGREEMENT (not a franchise agreement), do NOT include a franchise_terms section at all — omit it entirely from that entry.
 
 CRITICAL: The 'document' field in each fundamental_terms entry MUST be the exact filename from the --- DOCUMENT START: filename --- marker found in the input text.
 NEVER write 'filename.pdf' literally.
