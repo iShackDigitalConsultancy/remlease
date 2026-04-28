@@ -1368,7 +1368,40 @@ END:VCALENDAR`;
                   </div>
                   <div className="flex items-center gap-3 print:hidden">
                       <button 
-                         onClick={() => window.print()}
+                         onClick={async () => {
+                             try {
+                                 const headers = token
+                                     ? {Authorization: `Bearer ${token}`,
+                                        'Content-Type': 'application/json'}
+                                     : {'x-session-id': sessionId,
+                                        'Content-Type': 'application/json'};
+                                 const res = await fetch(
+                                     `${API_BASE}/export/pdf`, {
+                                     method: 'POST',
+                                     headers,
+                                     body: JSON.stringify({
+                                         report_type: 'portfolio',
+                                         report_data: {
+                                             portfolio_data: portfolioData,
+                                             firm_name: activeUser?.firm_name 
+                                                 || 'Property Portfolio'
+                                         },
+                                         workspace_name: 'All Workspaces',
+                                         document_names: []
+                                     })
+                                 });
+                                 if (!res.ok) throw new Error('Failed');
+                                 const blob = await res.blob();
+                                 const url = URL.createObjectURL(blob);
+                                 const a = document.createElement('a');
+                                 a.href = url;
+                                 a.download = 'rem_leases_portfolio.pdf';
+                                 a.click();
+                                 URL.revokeObjectURL(url);
+                             } catch (err) {
+                                 alert('Failed to export portfolio PDF.');
+                             }
+                         }}
                          className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:shadow transition-all"
                       >
                          <Printer size={16} className="text-slate-500" /> Export PDF

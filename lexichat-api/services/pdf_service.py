@@ -375,9 +375,74 @@ def build_compare_pdf(report_data, workspace_name, document_names) -> BytesIO:
     buffer.seek(0)
     return buffer
 
+def build_portfolio_pdf(portfolio_data, firm_name) -> BytesIO:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=cm, leftMargin=cm, topMargin=2*cm, bottomMargin=2*cm)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, textColor=colors.HexColor('#1a56db'), alignment=TA_CENTER)
+    
+    story = []
+    story.append(Paragraph("Global Portfolio Dashboard", title_style))
+    story.append(Paragraph(firm_name or "Property Portfolio", ParagraphStyle('Sub', parent=styles['Normal'], fontSize=12, alignment=TA_CENTER)))
+    story.append(Spacer(1, 1*cm))
+    
+    for ws in portfolio_data:
+        if not ws.get("cache_available"):
+            continue
+            
+        # Workspace header
+        story.append(Paragraph(f"<b>{ws.get('workspace_name','')}</b>", styles['Heading2']))
+        if ws.get("property_location"):
+            story.append(Paragraph(f"📍 {ws['property_location']}", styles['Normal']))
+        story.append(Spacer(1, 0.3*cm))
+        
+        # Documents table
+        docs = ws.get("documents", [])
+        if docs:
+            table_data = [[
+                Paragraph("<b>Document</b>", styles['Normal']),
+                Paragraph("<b>Type</b>", styles['Normal']),
+                Paragraph("<b>Commencement</b>", styles['Normal']),
+                Paragraph("<b>Expiry</b>", styles['Normal']),
+                Paragraph("<b>Renewal Deadline</b>", styles['Normal']),
+                Paragraph("<b>Action Required</b>", styles['Normal'])
+            ]]
+            
+            for doc_item in docs:
+                table_data.append([
+                    Paragraph(safe(doc_item.get("filename")), styles['Normal']),
+                    Paragraph(safe(doc_item.get("doc_type")), styles['Normal']),
+                    Paragraph(safe(doc_item.get("commencement_date")), styles['Normal']),
+                    Paragraph(safe(doc_item.get("expiry_date")), styles['Normal']),
+                    Paragraph(safe(doc_item.get("renewal_deadline")), styles['Normal']),
+                    Paragraph(safe(doc_item.get("action_required")), styles['Normal'])
+                ])
+            
+            t = Table(table_data, colWidths=[3.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 4.5*cm])
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1a56db')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('PADDING', (0,0), (-1,-1), 6),
+                ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f8fafc')])
+            ]))
+            story.append(t)
+        
+        story.append(Spacer(1, 0.8*cm))
+        story.append(HRFlowable(width="100%", thickness=1, color=colors.lightgrey))
+        story.append(Spacer(1, 0.5*cm))
+    
+    doc.build(story, onFirstPage=_add_branding, onLaterPages=_add_branding)
+    buffer.seek(0)
+    return buffer
+
 def generate_pdf(report_type: str, report_data: dict, workspace_name: str, document_names: list) -> BytesIO:
     if report_type == "expiries":
         return build_expiries_pdf(report_data, workspace_name, document_names)
+    elif report_type == "portfolio":
+        return build_portfolio_pdf(report_data.get("portfolio_data", []), report_data.get("firm_name", ""))
     elif report_type == "fundamental_terms":
         return build_fundamental_terms_pdf(report_data, workspace_name, document_names)
     elif report_type == "audit":

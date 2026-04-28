@@ -152,6 +152,7 @@ async def document_audit(payload: AuditRequest, current_user: Optional[models.Us
 
 class TimelineExtractionRequest(BaseModel):
     doc_ids: List[str]
+    force_refresh: bool = False
 
 @app.post("/api/extract-timeline")
 async def extract_timeline(payload: TimelineExtractionRequest, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):

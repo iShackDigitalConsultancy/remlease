@@ -236,7 +236,7 @@ Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON obje
         return json.loads(raw)
 
     workspace_id = doc.workspace_id
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_fundamental_terms.json")
+    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_audit.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
@@ -364,7 +364,8 @@ Copy it exactly as it appears after 'DOCUMENT START:' in the input."""
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return json.loads(raw)
 
-    return StreamingResponse(run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op), media_type="text/event-stream")
+    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_fundamental_terms.json")
+    return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
 async def extract_expiries(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
