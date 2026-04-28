@@ -97,109 +97,132 @@ def build_fundamental_terms_pdf(report_data, workspace_name, document_names) -> 
     story.append(Paragraph(workspace_name if workspace_name else "Portfolio", subtitle_style))
     story.append(Spacer(1, 1*cm))
     
-    ft = report_data.get("fundamental_terms", report_data if isinstance(report_data, dict) else {})
+    ft_data = report_data.get("fundamental_terms", report_data if isinstance(report_data, dict) else {})
+    if isinstance(ft_data, dict):
+        ft_items = [ft_data]
+    elif isinstance(ft_data, list):
+        ft_items = ft_data
+    else:
+        ft_items = []
+        
+    from reportlab.platypus import PageBreak
     
-    # A) Parties table
-    story.append(Paragraph("<b>Parties</b>", styles['Heading2']))
-    lessor = ft.get("lessor", {})
-    lessee = ft.get("lessee", {})
-    parties_data = [
-        ["Lessor", "Lessee"],
-        [f"Name: {safe(lessor.get('name'))}", f"Name: {safe(lessee.get('name'))}"],
-        [f"Registration: {safe(lessor.get('registration'))}", f"Registration: {safe(lessee.get('registration'))}"],
-        [f"Representative: {safe(lessor.get('representative'))}", f"Representative: {safe(lessee.get('representative'))}"],
-        [f"Domicilium: {safe(lessor.get('domicilium'))}", f"Domicilium: {safe(lessee.get('domicilium'))}"]
-    ]
-    t = Table(parties_data, colWidths=[9*cm, 9*cm])
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ('PADDING', (0,0), (-1,-1), 6)
-    ]))
-    story.append(t)
-    story.append(Spacer(1, 0.5*cm))
-    
-    # B) Premises & Key Dates table
-    story.append(Paragraph("<b>Premises & Key Dates</b>", styles['Heading2']))
-    premises = ft.get("premises", {})
-    premises_data = [
-        ["Premises Description", safe(premises.get("description"))],
-        ["Address", safe(premises.get("address"))],
-        ["ERF", safe(premises.get("erf"))],
-        ["Commencement Date", safe(ft.get("commencement_date"))],
-        ["Expiry Date", safe(ft.get("expiry_date"))],
-        ["Lease Period", safe(ft.get("lease_period"))],
-        ["Renewal Option", safe(ft.get("renewal_option"))],
-        ["Escalation Rate", safe(ft.get("escalation_rate"))],
-        ["Permitted Use", safe(ft.get("permitted_use"))]
-    ]
-    t2 = Table(premises_data, colWidths=[6*cm, 12*cm])
-    t2.setStyle(TableStyle([
-        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
-        ('TEXTCOLOR', (1,4), (1,4), colors.red),  # Expiry date value
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ('PADDING', (0,0), (-1,-1), 6)
-    ]))
-    story.append(t2)
-    story.append(Spacer(1, 0.5*cm))
-    
-    # C) Rental Schedule table
-    rental_sched = ft.get("rental_schedule", [])
-    if rental_sched:
-        story.append(Paragraph("<b>Rental Schedule</b>", styles['Heading2']))
-        rs_data = [["Period", "Monthly Amount", "Notes"]]
-        for rs in rental_sched:
-            rs_data.append([
-                safe(rs.get("period")),
-                safe(rs.get("amount") or 
-                     rs.get("monthly_amount")),
-                safe(rs.get("note") or 
-                     rs.get("notes"))
-            ])
+    for i, ft in enumerate(ft_items):
+        if i > 0:
+            story.append(PageBreak())
             
-        t3 = Table(rs_data, colWidths=[6*cm, 5*cm, 7*cm])
-        t3.setStyle(TableStyle([
+        doc_name = ft.get("document")
+        doc_type = ft.get("doc_type")
+        if doc_name:
+            title_text = f"{doc_name}"
+            if doc_type:
+                title_text += f" ({doc_type})"
+            story.append(Paragraph(f"<b>{title_text}</b>", styles['Heading2']))
+            story.append(Spacer(1, 0.3*cm))
+
+    
+        # A) Parties table
+        story.append(Paragraph("<b>Parties</b>", styles['Heading2']))
+        lessor = ft.get("lessor", {})
+        lessee = ft.get("lessee", {})
+        parties_data = [
+            ["Lessor", "Lessee"],
+            [f"Name: {safe(lessor.get('name'))}", f"Name: {safe(lessee.get('name'))}"],
+            [f"Registration: {safe(lessor.get('registration'))}", f"Registration: {safe(lessee.get('registration'))}"],
+            [f"Representative: {safe(lessor.get('representative'))}", f"Representative: {safe(lessee.get('representative'))}"],
+            [f"Domicilium: {safe(lessor.get('domicilium'))}", f"Domicilium: {safe(lessee.get('domicilium'))}"]
+        ]
+        t = Table(parties_data, colWidths=[9*cm, 9*cm])
+        t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
             ('PADDING', (0,0), (-1,-1), 6)
         ]))
-        story.append(t3)
+        story.append(t)
         story.append(Spacer(1, 0.5*cm))
-        
-    # D) Special Conditions
-    special_conds = ft.get("special_conditions", [])
-    if special_conds:
-        story.append(Paragraph("<b>Special Conditions</b>", styles['Heading2']))
-        for cond in special_conds:
-            story.append(Paragraph(f"• {safe(cond)}", normal))
-        story.append(Spacer(1, 0.5*cm))
-        
-    # E) Franchise Terms
-    franchise = ft.get("franchise_terms", {})
-    if franchise:
-        story.append(Paragraph("<b>Franchise Terms</b>", styles['Heading2']))
-        f_data = [
-            ["Commencement", safe(franchise.get("commencement_date"))],
-            ["Expiry", safe(franchise.get("expiry_date"))],
-            ["Term", safe(franchise.get("term_length"))],
-            ["Upfront Fee", safe(franchise.get("upfront_license_fee"))],
-            ["Fees", safe(franchise.get("monthly_franchise_fee"))]
+    
+        # B) Premises & Key Dates table
+        story.append(Paragraph("<b>Premises & Key Dates</b>", styles['Heading2']))
+        premises = ft.get("premises", {})
+        premises_data = [
+            ["Premises Description", safe(premises.get("description"))],
+            ["Address", safe(premises.get("address"))],
+            ["ERF", safe(premises.get("erf"))],
+            ["Commencement Date", safe(ft.get("commencement_date"))],
+            ["Expiry Date", safe(ft.get("expiry_date"))],
+            ["Lease Period", safe(ft.get("lease_period"))],
+            ["Renewal Option", safe(ft.get("renewal_option"))],
+            ["Escalation Rate", safe(ft.get("escalation_rate"))],
+            ["Permitted Use", safe(ft.get("permitted_use"))]
         ]
-        t4 = Table(f_data, colWidths=[6*cm, 12*cm])
-        t4.setStyle(TableStyle([
+        t2 = Table(premises_data, colWidths=[6*cm, 12*cm])
+        t2.setStyle(TableStyle([
             ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+            ('TEXTCOLOR', (1,4), (1,4), colors.red),  # Expiry date value
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
             ('PADDING', (0,0), (-1,-1), 6)
         ]))
-        story.append(t4)
+        story.append(t2)
         story.append(Spacer(1, 0.5*cm))
     
+        # C) Rental Schedule table
+        rental_sched = ft.get("rental_schedule", [])
+        if rental_sched:
+            story.append(Paragraph("<b>Rental Schedule</b>", styles['Heading2']))
+            rs_data = [["Period", "Monthly Amount", "Notes"]]
+            for rs in rental_sched:
+                rs_data.append([
+                    safe(rs.get("period")),
+                    safe(rs.get("amount") or 
+                         rs.get("monthly_amount")),
+                    safe(rs.get("note") or 
+                         rs.get("notes"))
+                ])
+            
+            t3 = Table(rs_data, colWidths=[6*cm, 5*cm, 7*cm])
+            t3.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('PADDING', (0,0), (-1,-1), 6)
+            ]))
+            story.append(t3)
+            story.append(Spacer(1, 0.5*cm))
+        
+        # D) Special Conditions
+        special_conds = ft.get("special_conditions", [])
+        if special_conds:
+            story.append(Paragraph("<b>Special Conditions</b>", styles['Heading2']))
+            for cond in special_conds:
+                story.append(Paragraph(f"• {safe(cond)}", normal))
+            story.append(Spacer(1, 0.5*cm))
+        
+        # E) Franchise Terms
+        franchise = ft.get("franchise_terms", {})
+        if franchise:
+            story.append(Paragraph("<b>Franchise Terms</b>", styles['Heading2']))
+            f_data = [
+                ["Commencement", safe(franchise.get("commencement_date"))],
+                ["Expiry", safe(franchise.get("expiry_date"))],
+                ["Term", safe(franchise.get("term_length"))],
+                ["Upfront Fee", safe(franchise.get("upfront_license_fee"))],
+                ["Fees", safe(franchise.get("monthly_franchise_fee"))]
+            ]
+            t4 = Table(f_data, colWidths=[6*cm, 12*cm])
+            t4.setStyle(TableStyle([
+                ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('PADDING', (0,0), (-1,-1), 6)
+            ]))
+            story.append(t4)
+            story.append(Spacer(1, 0.5*cm))
+    
+
     doc.build(story, onFirstPage=_add_branding, onLaterPages=_add_branding)
     buffer.seek(0)
     return buffer

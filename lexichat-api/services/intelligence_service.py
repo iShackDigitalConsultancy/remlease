@@ -279,66 +279,73 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
     map_task = "Extract all fundamental lease terms from this section. Look for: party names and registration numbers, Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., lease period, commencement date, expiry date, beneficial occupation date, rental amounts per period, escalation rate, permitted use, trading hours, security deposit, payment/banking details, renewal options, special conditions, and suretyship details. If the document uses a PREAMBLE or numbered clause format instead of a schedule table, extract the same information from those sections. Look for LESSOR/LESSEE definitions, PREMISES description in clause 1, COMMENCEMENT DATE in clause 3, EXPIRY DATE in clause 3, BASIC MONTHLY RENTAL in clause 4 tables, DEPOSITS in clause 8, SPECIAL CONDITIONS in clause 16. For franchise agreements, the COMMENCEMENT DATE is explicitly stated in Annexure A under 'FINANCIAL AND OTHER TERMS' as item 7 'Commencement Date'. The EXPIRY DATE must be calculated as commencement date plus duration (item 8). The DURATION is typically stated as 'X years from Commencement Date'. Extract these values precisely."
     reduce_task = """Produce a comprehensive summary of all fundamental lease terms.
 JSON SCHEMA REQUIREMENT:
-{{
-  "fundamental_terms": {{
-    "lessor": {{
-      "name": "string",
-      "registration": "string",
-      "representative": "string",
-      "domicilium": "string"
-    }},
-    "lessee": {{
-      "name": "string",
-      "registration": "string", 
-      "representative": "string",
-      "domicilium": "string"
-    }},
-    "premises": {{
-      "description": "string",
-      "address": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-      "erf": "string"
-    }},
-    "lease_period": "string",
-    "commencement_date": "YYYY-MM-DD",
-    "expiry_date": "YYYY-MM-DD",
-    "beneficial_occupation_date": "YYYY-MM-DD or null",
-    "renewal_option": "string",
-    "escalation_rate": "string",
-    "permitted_use": "string",
-    "security_deposit": "string",
-    "rental_schedule": [
-      {{
-        "period": "YYYY-MM-DD to YYYY-MM-DD",
-        "amount": "R X,XXX.XX per month",
-        "note": "optional note"
-      }}
-    ],
-    "trading_hours": {{
-      "monday_thursday": "string",
-      "friday": "string",
-      "saturday": "string",
-      "sunday_public_holidays": "string"
-    }},
-    "payment_details": {{
-      "bank": "string",
-      "branch": "string",
-      "account_number": "string",
-      "account_type": "string"
-    }},
-    "special_conditions": ["string array"],
-    "suretyship": "string or null",
-    "franchise_terms": {{
-      "commencement_date": "YYYY-MM-DD or null",
-      "expiry_date": "YYYY-MM-DD or null",
-      "term_length": "string or null",
-      "renewal_option": "string or null",
-      "upfront_license_fee": "string or null",
-      "monthly_franchise_fee": "string or null"
-    }}
-  }}
-}}
+{
+  "fundamental_terms": [
+    {
+      "document": "filename.pdf",
+      "doc_type": "Lease Agreement or Franchise Agreement",
+      "lessor": {
+        "name": "string",
+        "registration": "string",
+        "representative": "string",
+        "domicilium": "string"
+      },
+      "lessee": {
+        "name": "string",
+        "registration": "string", 
+        "representative": "string",
+        "domicilium": "string"
+      },
+      "premises": {
+        "description": "string",
+        "address": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
+        "erf": "string"
+      },
+      "lease_period": "string",
+      "commencement_date": "YYYY-MM-DD",
+      "expiry_date": "YYYY-MM-DD",
+      "beneficial_occupation_date": "YYYY-MM-DD or null",
+      "renewal_option": "string",
+      "escalation_rate": "string",
+      "permitted_use": "string",
+      "security_deposit": "string",
+      "rental_schedule": [
+        {
+          "period": "YYYY-MM-DD to YYYY-MM-DD",
+          "amount": "R X,XXX.XX per month",
+          "note": "optional note"
+        }
+      ],
+      "trading_hours": {
+        "monday_thursday": "string",
+        "friday": "string",
+        "saturday": "string",
+        "sunday_public_holidays": "string"
+      },
+      "payment_details": {
+        "bank": "string",
+        "branch": "string",
+        "account_number": "string",
+        "account_type": "string"
+      },
+      "special_conditions": ["string array"],
+      "suretyship": "string or null",
+      "franchise_terms": {
+        "commencement_date": "YYYY-MM-DD or null",
+        "expiry_date": "YYYY-MM-DD or null",
+        "term_length": "string or null",
+        "renewal_option": "string or null",
+        "upfront_license_fee": "string or null",
+        "monthly_franchise_fee": "string or null"
+      }
+    }
+  ]
+}
 
-If this is a lease agreement only, set all franchise_terms fields to null.
+Return one fundamental_terms entry per document. Each entry must reflect ONLY the data from that specific document.
+Do not mix lease data with franchise data. The document field must match the filename from the --- DOCUMENT START --- marker.
+
+If a document is a lease agreement only, set all franchise_terms fields to null.
 franchise_terms.commencement_date: Extract from Annexure A item 7 — do not leave null if the document is a franchise agreement.
 franchise_terms.expiry_date: Calculate from commencement + duration if not explicit.
 
@@ -353,36 +360,43 @@ DOCUMENTS TEXT:
 
 INSTRUCTIONS:
 Output ONLY valid JSON matching this exact structure:
-{{
-  "fundamental_terms": {{
-    "lessor": {{ "name": "string", "registration": "string", "representative": "string", "domicilium": "string" }},
-    "lessee": {{ "name": "string", "registration": "string", "representative": "string", "domicilium": "string" }},
-    "premises": {{ "description": "string", "address": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.", "erf": "string" }},
-    "lease_period": "string",
-    "commencement_date": "YYYY-MM-DD",
-    "expiry_date": "YYYY-MM-DD",
-    "beneficial_occupation_date": "YYYY-MM-DD or null",
-    "renewal_option": "string",
-    "escalation_rate": "string",
-    "permitted_use": "string",
-    "security_deposit": "string",
-    "rental_schedule": [ {{ "period": "YYYY-MM-DD to YYYY-MM-DD", "amount": "R X,XXX.XX per month", "note": "optional note" }} ],
-    "trading_hours": {{ "monday_thursday": "string", "friday": "string", "saturday": "string", "sunday_public_holidays": "string" }},
-    "payment_details": {{ "bank": "string", "branch": "string", "account_number": "string", "account_type": "string" }},
-    "special_conditions": ["string array"],
-    "suretyship": "string or null",
-    "franchise_terms": {{
-      "commencement_date": "YYYY-MM-DD or null",
-      "expiry_date": "YYYY-MM-DD or null",
-      "term_length": "string or null",
-      "renewal_option": "string or null",
-      "upfront_license_fee": "string or null",
-      "monthly_franchise_fee": "string or null"
-    }}
-  }}
-}}
+{
+  "fundamental_terms": [
+    {
+      "document": "filename.pdf",
+      "doc_type": "Lease Agreement or Franchise Agreement",
+      "lessor": { "name": "string", "registration": "string", "representative": "string", "domicilium": "string" },
+      "lessee": { "name": "string", "registration": "string", "representative": "string", "domicilium": "string" },
+      "premises": { "description": "string", "address": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.", "erf": "string" },
+      "lease_period": "string",
+      "commencement_date": "YYYY-MM-DD",
+      "expiry_date": "YYYY-MM-DD",
+      "beneficial_occupation_date": "YYYY-MM-DD or null",
+      "renewal_option": "string",
+      "escalation_rate": "string",
+      "permitted_use": "string",
+      "security_deposit": "string",
+      "rental_schedule": [ { "period": "YYYY-MM-DD to YYYY-MM-DD", "amount": "R X,XXX.XX per month", "note": "optional note" } ],
+      "trading_hours": { "monday_thursday": "string", "friday": "string", "saturday": "string", "sunday_public_holidays": "string" },
+      "payment_details": { "bank": "string", "branch": "string", "account_number": "string", "account_type": "string" },
+      "special_conditions": ["string array"],
+      "suretyship": "string or null",
+      "franchise_terms": {
+        "commencement_date": "YYYY-MM-DD or null",
+        "expiry_date": "YYYY-MM-DD or null",
+        "term_length": "string or null",
+        "renewal_option": "string or null",
+        "upfront_license_fee": "string or null",
+        "monthly_franchise_fee": "string or null"
+      }
+    }
+  ]
+}
 
-If this is a lease agreement only, set all franchise_terms fields to null.
+Return one fundamental_terms entry per document. Each entry must reflect ONLY the data from that specific document.
+Do not mix lease data with franchise data. The document field must match the filename from the --- DOCUMENT START --- marker.
+
+If a document is a lease agreement only, set all franchise_terms fields to null.
 franchise_terms.commencement_date: Extract from Annexure A item 7 — do not leave null if the document is a franchise agreement.
 franchise_terms.expiry_date: Calculate from commencement + duration if not explicit.
 
@@ -447,7 +461,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
     '      "expiry_date": "YYYY-MM-DD",\n'
     '      "lease_end_date": "YYYY-MM-DD",\n'
-    '      "renewal_option_period": "e.g. 1 x 5 years or null",\n'
+    '      "renewal_option_period": "e.g. 1 x 5 years — text only, never a date",\n'
     '      "renewal_deadline": "YYYY-MM-DD",\n'
     '      "clause": "Governing clause text",\n'
     '      "clause_reference": "e.g. 12.1",\n'
@@ -460,7 +474,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
     '      "expiry_date": "YYYY-MM-DD",\n'
     '      "lease_end_date": "YYYY-MM-DD",\n'
-    '      "renewal_option_period": "e.g. 1 x 5 years or null",\n'
+    '      "renewal_option_period": "e.g. 1 x 5 years — text only, never a date",\n'
     '      "renewal_deadline": "YYYY-MM-DD",\n'
     '      "clause": "Governing clause text",\n'
     '      "clause_reference": "e.g. 12.1",\n'
@@ -473,9 +487,9 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
 For each document entry you MUST populate:
 - commencement_date (never leave null if the document has a start date)
 - beneficial_occupation_date (null if absent)
-- expiry_date (never leave null)
+- expiry_date (MUST be a date in YYYY-MM-DD format. This is the date the agreement ends. NEVER leave this null if the document has an end date.)
 - lease_end_date (same as expiry_date if not separately stated)
-- renewal_option_period (e.g. 1 x 5 years, null if none)
+- renewal_option_period (MUST be a text description like '1 x 5 years' or '2 x 3 years'. NEVER put a date here. If there is no renewal option, set to null.)
 - renewal_deadline (calculate as 6 months before expiry if clause states 6 month notice period)
 For FRANCHISE AGREEMENTS: commencement from Annexure A item 7, expiry = commencement + item 8 duration.
 Do NOT copy or duplicate dates across entries.

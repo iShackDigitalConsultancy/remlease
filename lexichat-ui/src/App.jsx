@@ -2029,6 +2029,18 @@ END:VCALENDAR`;
                    )}
                    <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-slate-50/50">
                      
+                     {(Array.isArray(timelineData.fundamental_terms) ? timelineData.fundamental_terms : [timelineData.fundamental_terms]).filter(Boolean).map((termData, index) => (
+                       <div key={index} className="mb-12 last:mb-0 border-b-2 border-dashed border-slate-200 pb-12 last:border-0 last:pb-0">
+                         {termData.document && (
+                           <div className="flex items-center gap-3 mb-6 bg-slate-100 p-4 rounded-xl border border-slate-200">
+                             <h2 className="text-lg font-bold text-slate-800">{termData.document}</h2>
+                             {termData.doc_type && (
+                               <span className="text-xs font-bold px-2.5 py-1 bg-brand-blue text-white rounded-md">
+                                 {termData.doc_type}
+                               </span>
+                             )}
+                           </div>
+                         )}
                      {/* Parties Section */}
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                         {/* Lessor Card */}
@@ -2037,10 +2049,10 @@ END:VCALENDAR`;
                             <Building2 size={16} className="text-brand-blue" /> Lessor
                           </h3>
                           <div className="space-y-3">
-                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Name</span><p className="text-sm font-medium text-slate-900">{safeStr(timelineData.fundamental_terms?.lessor?.name)}</p></div>
-                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Registration</span><p className="text-sm text-slate-700">{safeStr(timelineData.fundamental_terms?.lessor?.registration)}</p></div>
-                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Representative</span><p className="text-sm text-slate-700">{safeStr(timelineData.fundamental_terms?.lessor?.representative)}</p></div>
-                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Domicilium</span><p className="text-sm text-slate-700 text-balance">{safeStr(timelineData.fundamental_terms?.lessor?.domicilium)}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Name</span><p className="text-sm font-medium text-slate-900">{safeStr(termData?.lessor?.name)}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Registration</span><p className="text-sm text-slate-700">{safeStr(termData?.lessor?.registration)}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Representative</span><p className="text-sm text-slate-700">{safeStr(termData?.lessor?.representative)}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Domicilium</span><p className="text-sm text-slate-700 text-balance">{safeStr(termData?.lessor?.domicilium)}</p></div>
                           </div>
                         </div>
 
@@ -2050,10 +2062,10 @@ END:VCALENDAR`;
                             <Users size={16} className="text-brand-accent" /> Lessee
                           </h3>
                           <div className="space-y-3">
-                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Name</span><p className="text-sm font-medium text-slate-900">{safeStr(timelineData.fundamental_terms?.lessee?.name)}</p></div>
-                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Registration</span><p className="text-sm text-slate-700">{safeStr(timelineData.fundamental_terms?.lessee?.registration)}</p></div>
-                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Representative</span><p className="text-sm text-slate-700">{safeStr(timelineData.fundamental_terms?.lessee?.representative)}</p></div>
-                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Domicilium</span><p className="text-sm text-slate-700 text-balance">{safeStr(timelineData.fundamental_terms?.lessee?.domicilium)}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Name</span><p className="text-sm font-medium text-slate-900">{safeStr(termData?.lessee?.name)}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Registration</span><p className="text-sm text-slate-700">{safeStr(termData?.lessee?.registration)}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Representative</span><p className="text-sm text-slate-700">{safeStr(termData?.lessee?.representative)}</p></div>
+                            <div><span className="text-[10px] uppercase text-slate-400 font-bold">Domicilium</span><p className="text-sm text-slate-700 text-balance">{safeStr(termData?.lessee?.domicilium)}</p></div>
                           </div>
                         </div>
                      </div>
@@ -2062,21 +2074,21 @@ END:VCALENDAR`;
                      <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6 mb-6">
                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3">Premises & Key Metrics</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                           <div><span className="text-[10px] uppercase text-slate-400 font-bold">Description</span><p className="text-sm font-medium text-slate-800">{safeStr(timelineData.fundamental_terms?.premises?.description)}</p></div>
-                           <div><span className="text-[10px] uppercase text-slate-400 font-bold">Address</span><p className="text-sm text-slate-700">{safeStr(timelineData.fundamental_terms?.premises?.address)}</p></div>
-                           <div><span className="text-[10px] uppercase text-slate-400 font-bold">ERF</span><p className="text-sm text-slate-700">{safeStr(timelineData.fundamental_terms?.premises?.erf)}</p></div>
+                           <div><span className="text-[10px] uppercase text-slate-400 font-bold">Description</span><p className="text-sm font-medium text-slate-800">{safeStr(termData?.premises?.description)}</p></div>
+                           <div><span className="text-[10px] uppercase text-slate-400 font-bold">Address</span><p className="text-sm text-slate-700">{safeStr(termData?.premises?.address)}</p></div>
+                           <div><span className="text-[10px] uppercase text-slate-400 font-bold">ERF</span><p className="text-sm text-slate-700">{safeStr(termData?.premises?.erf)}</p></div>
                            
                            <div className="lg:col-span-3 pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-6">
-                             <div><span className="text-[10px] uppercase text-slate-400 font-bold">Permitted Use</span><p className="text-sm text-slate-800 border-l-2 border-brand-accent pl-3 mt-1 py-1">{safeStr(timelineData.fundamental_terms?.permitted_use)}</p></div>
+                             <div><span className="text-[10px] uppercase text-slate-400 font-bold">Permitted Use</span><p className="text-sm text-slate-800 border-l-2 border-brand-accent pl-3 mt-1 py-1">{safeStr(termData?.permitted_use)}</p></div>
                              <div><span className="text-[10px] uppercase text-slate-400 font-bold">Trading Hours</span>
                                  <ul className="text-xs text-slate-700 mt-1 space-y-1">
-                                    <li><span className="font-medium">Mon-Thu:</span> {safeStr(timelineData.fundamental_terms?.trading_hours?.monday_thursday)}</li>
-                                    <li><span className="font-medium">Friday:</span> {safeStr(timelineData.fundamental_terms?.trading_hours?.friday)}</li>
-                                    <li><span className="font-medium">Saturday:</span> {safeStr(timelineData.fundamental_terms?.trading_hours?.saturday)}</li>
-                                    <li><span className="font-medium">Sun/PH:</span> {safeStr(timelineData.fundamental_terms?.trading_hours?.sunday_public_holidays)}</li>
+                                    <li><span className="font-medium">Mon-Thu:</span> {safeStr(termData?.trading_hours?.monday_thursday)}</li>
+                                    <li><span className="font-medium">Friday:</span> {safeStr(termData?.trading_hours?.friday)}</li>
+                                    <li><span className="font-medium">Saturday:</span> {safeStr(termData?.trading_hours?.saturday)}</li>
+                                    <li><span className="font-medium">Sun/PH:</span> {safeStr(termData?.trading_hours?.sunday_public_holidays)}</li>
                                  </ul>
                              </div>
-                             <div><span className="text-[10px] uppercase text-slate-400 font-bold">Security Deposit</span><p className="text-sm font-bold text-amber-600 bg-amber-50 px-3 py-2 rounded-lg mt-1 border border-amber-200">{safeStr(timelineData.fundamental_terms?.security_deposit)}</p></div>
+                             <div><span className="text-[10px] uppercase text-slate-400 font-bold">Security Deposit</span><p className="text-sm font-bold text-amber-600 bg-amber-50 px-3 py-2 rounded-lg mt-1 border border-amber-200">{safeStr(termData?.security_deposit)}</p></div>
                            </div>
                         </div>
                      </div>
@@ -2089,11 +2101,11 @@ END:VCALENDAR`;
                             <Clock size={16} className="text-emerald-500" /> Critical Dates
                           </h3>
                           <div className="space-y-4">
-                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Lease Period</span><span className="text-sm font-bold text-slate-800">{safeStr(timelineData.fundamental_terms?.lease_period)}</span></div>
-                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Commencement</span><span className="text-sm font-medium text-slate-800">{safeStr(timelineData.fundamental_terms?.commencement_date)}</span></div>
-                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Expiry Date</span><span className="text-sm font-bold text-rose-600">{safeStr(timelineData.fundamental_terms?.expiry_date)}</span></div>
-                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Beneficial Occupation</span><span className="text-sm font-medium text-slate-800">{safeStr(timelineData.fundamental_terms?.beneficial_occupation_date)}</span></div>
-                            <div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-500 uppercase">Renewal Option</span><span className="text-sm font-medium text-brand-blue bg-brand-blue/10 px-2 py-0.5 rounded">{safeStr(timelineData.fundamental_terms?.renewal_option)}</span></div>
+                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Lease Period</span><span className="text-sm font-bold text-slate-800">{safeStr(termData?.lease_period)}</span></div>
+                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Commencement</span><span className="text-sm font-medium text-slate-800">{safeStr(termData?.commencement_date)}</span></div>
+                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Expiry Date</span><span className="text-sm font-bold text-rose-600">{safeStr(termData?.expiry_date)}</span></div>
+                            <div className="flex justify-between items-center border-b border-slate-50 pb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Beneficial Occupation</span><span className="text-sm font-medium text-slate-800">{safeStr(termData?.beneficial_occupation_date)}</span></div>
+                            <div className="flex justify-between items-center"><span className="text-[11px] font-bold text-slate-500 uppercase">Renewal Option</span><span className="text-sm font-medium text-brand-blue bg-brand-blue/10 px-2 py-0.5 rounded">{safeStr(termData?.renewal_option)}</span></div>
                           </div>
                         </div>
 
@@ -2103,24 +2115,24 @@ END:VCALENDAR`;
                             <Database size={16} className="text-indigo-500" /> Financial Details
                           </h3>
                           <div className="space-y-4 mb-6">
-                            <div className="flex justify-between items-center pb-2 border-b border-slate-50"><span className="text-[11px] font-bold text-slate-500 uppercase">Escalation Rate</span><span className="text-sm font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{safeStr(timelineData.fundamental_terms?.escalation_rate)}</span></div>
-                            <div className="flex justify-between items-center pb-2 border-b border-slate-50"><span className="text-[11px] font-bold text-slate-500 uppercase">Suretyship</span><span className="text-sm font-medium text-slate-700">{safeStr(timelineData.fundamental_terms?.suretyship)}</span></div>
+                            <div className="flex justify-between items-center pb-2 border-b border-slate-50"><span className="text-[11px] font-bold text-slate-500 uppercase">Escalation Rate</span><span className="text-sm font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{safeStr(termData?.escalation_rate)}</span></div>
+                            <div className="flex justify-between items-center pb-2 border-b border-slate-50"><span className="text-[11px] font-bold text-slate-500 uppercase">Suretyship</span><span className="text-sm font-medium text-slate-700">{safeStr(termData?.suretyship)}</span></div>
                           </div>
                           
                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                              <span className="block text-[10px] uppercase font-bold text-slate-400 mb-2">Banking Details</span>
                              <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div><span className="text-slate-500">Bank:</span> <span className="font-medium">{safeStr(timelineData.fundamental_terms?.payment_details?.bank)}</span></div>
-                                <div><span className="text-slate-500">Branch:</span> <span className="font-medium">{safeStr(timelineData.fundamental_terms?.payment_details?.branch)}</span></div>
-                                <div><span className="text-slate-500">Account:</span> <span className="font-medium">{safeStr(timelineData.fundamental_terms?.payment_details?.account_number)}</span></div>
-                                <div><span className="text-slate-500">Type:</span> <span className="font-medium">{safeStr(timelineData.fundamental_terms?.payment_details?.account_type)}</span></div>
+                                <div><span className="text-slate-500">Bank:</span> <span className="font-medium">{safeStr(termData?.payment_details?.bank)}</span></div>
+                                <div><span className="text-slate-500">Branch:</span> <span className="font-medium">{safeStr(termData?.payment_details?.branch)}</span></div>
+                                <div><span className="text-slate-500">Account:</span> <span className="font-medium">{safeStr(termData?.payment_details?.account_number)}</span></div>
+                                <div><span className="text-slate-500">Type:</span> <span className="font-medium">{safeStr(termData?.payment_details?.account_type)}</span></div>
                              </div>
                           </div>
                         </div>
                      </div>
 
                      {/* Rental Schedule Table */}
-                     {timelineData.fundamental_terms?.rental_schedule && timelineData.fundamental_terms.rental_schedule.length > 0 && (
+                     {termData?.rental_schedule && termData.rental_schedule.length > 0 && (
                        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden mb-6">
                           <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
                              <h3 className="text-xs font-bold text-slate-600 uppercase tracking-widest">Rental Schedule</h3>
@@ -2135,7 +2147,7 @@ END:VCALENDAR`;
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                   {timelineData.fundamental_terms.rental_schedule.map((rent, i) => (
+                                   {termData.rental_schedule.map((rent, i) => (
                                       <tr key={i} className="hover:bg-slate-50 transition-colors">
                                          <td className="px-6 py-3 font-medium text-slate-700 whitespace-nowrap">{safeStr(rent.period)}</td>
                                          <td className="px-6 py-3 font-bold text-emerald-700 whitespace-nowrap">{safeStr(rent.amount)}</td>
@@ -2149,22 +2161,22 @@ END:VCALENDAR`;
                      )}
 
                      {/* Special Conditions */}
-                     {timelineData.fundamental_terms?.special_conditions && timelineData.fundamental_terms.special_conditions.length > 0 && (
+                     {termData?.special_conditions && termData.special_conditions.length > 0 && (
                        <div className="bg-rose-50/50 border border-rose-100 shadow-sm rounded-2xl p-6 mb-6">
                           <h3 className="text-xs font-bold text-rose-800 uppercase tracking-widest mb-4 flex items-center gap-2">
                              <ShieldAlert size={16} /> Special Conditions
                           </h3>
                           <ul className="list-disc pl-5 space-y-2 text-sm text-slate-800">
-                             {timelineData.fundamental_terms.special_conditions.map((cond, i) => (
+                             {termData.special_conditions.map((cond, i) => (
                                <li key={i} className="leading-relaxed">{safeStr(cond)}</li>
                              ))}
                           </ul>
                        </div>
                      )}
 
-{timelineData.fundamental_terms?.franchise_terms?.
+{termData?.franchise_terms?.
   commencement_date && 
-  timelineData.fundamental_terms.franchise_terms
+  termData.franchise_terms
   .commencement_date !== 'null' && (
   <div className="bg-blue-50 border border-blue-100 
     shadow-sm rounded-2xl p-6">
@@ -2180,7 +2192,7 @@ END:VCALENDAR`;
           text-slate-400 font-bold block mb-1">
           Commencement</span>
         <p className="text-sm font-medium">
-          {safeStr(timelineData.fundamental_terms
+          {safeStr(termData
           .franchise_terms.commencement_date)}</p>
       </div>
       <div>
@@ -2189,7 +2201,7 @@ END:VCALENDAR`;
           Expiry Date</span>
         <p className="text-sm font-bold 
           text-rose-600">
-          {safeStr(timelineData.fundamental_terms
+          {safeStr(termData
           .franchise_terms.expiry_date)}</p>
       </div>
       <div>
@@ -2197,7 +2209,7 @@ END:VCALENDAR`;
           text-slate-400 font-bold block mb-1">
           Term Length</span>
         <p className="text-sm">
-          {safeStr(timelineData.fundamental_terms
+          {safeStr(termData
           .franchise_terms.term_length)}</p>
       </div>
       <div>
@@ -2205,7 +2217,7 @@ END:VCALENDAR`;
           text-slate-400 font-bold block mb-1">
           Renewal Option</span>
         <p className="text-sm">
-          {safeStr(timelineData.fundamental_terms
+          {safeStr(termData
           .franchise_terms.renewal_option)}</p>
       </div>
       <div>
@@ -2214,7 +2226,7 @@ END:VCALENDAR`;
           Upfront Fee</span>
         <p className="text-sm font-medium 
           text-emerald-700">
-          {safeStr(timelineData.fundamental_terms
+          {safeStr(termData
           .franchise_terms.upfront_license_fee)}
         </p>
       </div>
@@ -2224,7 +2236,7 @@ END:VCALENDAR`;
           Monthly Fee</span>
         <p className="text-sm font-medium 
           text-emerald-700">
-          {safeStr(timelineData.fundamental_terms
+          {safeStr(termData
           .franchise_terms.monthly_franchise_fee)}
         </p>
       </div>
@@ -2232,7 +2244,9 @@ END:VCALENDAR`;
   </div>
 )}
                      
-                   </div>
+
+                       </div>
+                     ))}                   </div>
                  </div>
               ) : (
                  <div className="flex-1 flex flex-col items-center justify-center text-red-500 gap-4">
