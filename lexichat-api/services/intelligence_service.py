@@ -143,41 +143,44 @@ async def document_audit(payload, current_user: Optional[models.User] = Depends(
     full_text = doc_text
 
     map_task = f"Extract all policy clauses, compliance obligations, and risk provisions from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., parties, and any compliance obligations per party."
+    _audit_json_template = (
+        '{\n'
+        '  "document_context": {\n'
+        '    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled \'PREMISES\', \'Shop No\', \'Store Location\', or \'Location\' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",\n'
+        '    "parties": [\n'
+        '      {"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}\n'
+        '    ],\n'
+        '    "obligations": [\n'
+        '      {\n'
+        '        "party": "Party name",\n'
+        '        "category": "Financial | Operational | Maintenance | Compliance",\n'
+        '        "obligation": "Description of the obligation",\n'
+        '        "clause_reference": "e.g. 4.2.3 or Schedule 1"\n'
+        '      }\n'
+        '    ]\n'
+        '  },\n'
+        '  "audit": [\n'
+        '    {\n'
+        '      "check": "Rule 1 from the policy",\n'
+        '      "status": "PASS",\n'
+        '      "explanation": "Brief explanation of why it passed, quoting the text if possible.",\n'
+        '      "clause_reference": "e.g. 1.2"\n'
+        '    },\n'
+        '    {\n'
+        '      "check": "Rule 2 from the policy",\n'
+        '      "status": "FAIL",\n'
+        '      "explanation": "Explanation of why it failed or is missing.",\n'
+        '      "clause_reference": "e.g. 1.2"\n'
+        '    }\n'
+        '  ]\n'
+        '}'
+    )
     reduce_task = f"""Produce a structured audit report flagging all compliance risks and policy gaps against this strictly provided policy:
 {payload.policy}
 
 Deduplicate identical violations found across different sections.
 Output ONLY valid JSON matching this exact array structure:
-{{
-  "document_context": {{
-    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
-      {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
-      }}
-    ]
-  }},
-  "audit": [
-    {{
-      "check": "Rule 1 from the policy",
-      "status": "PASS", 
-      "explanation": "Brief explanation of why it passed, quoting the text if possible.",
-      "clause_reference": "e.g. 1.2"
-    }},
-    {{
-      "check": "Rule 2 from the policy",
-      "status": "FAIL", 
-      "explanation": "Explanation of why it failed or is missing.",
-      "clause_reference": "e.g. 1.2"
-    }}
-  ]
-}}
+{_audit_json_template}
 Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON object."""
 
     def legacy_op():
@@ -193,36 +196,7 @@ DOCUMENT TEXT:
 INSTRUCTIONS:
 Evaluate the document strictly against the policy above. 
 Output ONLY valid JSON matching this exact structure:
-{{
-  "document_context": {{
-    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
-      {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
-      }}
-    ]
-  }},
-  "audit": [
-    {{
-      "check": "Rule 1 from the policy",
-      "status": "PASS", 
-      "explanation": "Brief explanation of why it passed, quoting the text if possible.",
-      "clause_reference": "e.g. 1.2"
-    }},
-    {{
-      "check": "Rule 2 from the policy",
-      "status": "FAIL", 
-      "explanation": "Explanation of why it failed or is missing.",
-      "clause_reference": "e.g. 1.2"
-    }}
-  ]
-}}
+{_audit_json_template}
 
 Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON object."""
         resp = groq_client.chat.completions.create(
@@ -353,45 +327,49 @@ Return ONLY the raw JSON object."""
 
     def legacy_op():
         old_full_text = str(full_text)[:18000]
+        _timeline_json_schema = (
+            '{\n'
+            '  "fundamental_terms": [\n'
+            '    {\n'
+            '      "document": "filename.pdf",\n'
+            '      "doc_type": "Lease Agreement or Franchise Agreement",\n'
+            '      "lessor": { "name": "string", "registration": "string", "representative": "string", "domicilium": "string" },\n'
+            '      "lessee": { "name": "string", "registration": "string", "representative": "string", "domicilium": "string" },\n'
+            '      "premises": { "description": "string", "address": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled \'PREMISES\', \'Shop No\', \'Store Location\', or \'Location\' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.", "erf": "string" },\n'
+            '      "lease_period": "string",\n'
+            '      "commencement_date": "YYYY-MM-DD",\n'
+            '      "expiry_date": "YYYY-MM-DD",\n'
+            '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
+            '      "renewal_option": "string",\n'
+            '      "escalation_rate": "string",\n'
+            '      "permitted_use": "string",\n'
+            '      "security_deposit": "string",\n'
+            '      "rental_schedule": [ { "period": "YYYY-MM-DD to YYYY-MM-DD", "amount": "R X,XXX.XX per month", "note": "optional note" } ],\n'
+            '      "trading_hours": { "monday_thursday": "string", "friday": "string", "saturday": "string", "sunday_public_holidays": "string" },\n'
+            '      "payment_details": { "bank": "string", "branch": "string", "account_number": "string", "account_type": "string" },\n'
+            '      "special_conditions": ["string array"],\n'
+            '      "suretyship": "string or null",\n'
+            '      "franchise_terms": {\n'
+            '        "commencement_date": "YYYY-MM-DD or null",\n'
+            '        "expiry_date": "YYYY-MM-DD or null",\n'
+            '        "term_length": "string or null",\n'
+            '        "renewal_option": "string or null",\n'
+            '        "upfront_license_fee": "string or null",\n'
+            '        "monthly_franchise_fee": "string or null"\n'
+            '      }\n'
+            '    }\n'
+            '  ]\n'
+            '}'
+        )
         prompt = f"""You are a master commercial real estate attorney. Extract the fundamental terms of the provided lease or franchise agreement.
+
 
 DOCUMENTS TEXT:
 {old_full_text}
 
 INSTRUCTIONS:
 Output ONLY valid JSON matching this exact structure:
-{
-  "fundamental_terms": [
-    {
-      "document": "filename.pdf",
-      "doc_type": "Lease Agreement or Franchise Agreement",
-      "lessor": { "name": "string", "registration": "string", "representative": "string", "domicilium": "string" },
-      "lessee": { "name": "string", "registration": "string", "representative": "string", "domicilium": "string" },
-      "premises": { "description": "string", "address": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.", "erf": "string" },
-      "lease_period": "string",
-      "commencement_date": "YYYY-MM-DD",
-      "expiry_date": "YYYY-MM-DD",
-      "beneficial_occupation_date": "YYYY-MM-DD or null",
-      "renewal_option": "string",
-      "escalation_rate": "string",
-      "permitted_use": "string",
-      "security_deposit": "string",
-      "rental_schedule": [ { "period": "YYYY-MM-DD to YYYY-MM-DD", "amount": "R X,XXX.XX per month", "note": "optional note" } ],
-      "trading_hours": { "monday_thursday": "string", "friday": "string", "saturday": "string", "sunday_public_holidays": "string" },
-      "payment_details": { "bank": "string", "branch": "string", "account_number": "string", "account_type": "string" },
-      "special_conditions": ["string array"],
-      "suretyship": "string or null",
-      "franchise_terms": {
-        "commencement_date": "YYYY-MM-DD or null",
-        "expiry_date": "YYYY-MM-DD or null",
-        "term_length": "string or null",
-        "renewal_option": "string or null",
-        "upfront_license_fee": "string or null",
-        "monthly_franchise_fee": "string or null"
-      }
-    }
-  ]
-}
+{_timeline_json_schema}
 
 Return one fundamental_terms entry per document. Each entry must reflect ONLY the data from that specific document.
 Do not mix lease data with franchise data. The document field must match the filename from the --- DOCUMENT START --- marker.
@@ -483,6 +461,27 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
 )
 
     map_task = "Extract all dates, deadlines, and timeframes from this section. You MUST extract ALL of these specific fields if present:\n1. Commencement Date — when the lease/agreement starts\n2. Beneficial Occupation Date — when tenant gets early access\n3. Expiry Date / Lease End Date — when it ends\n4. Renewal Option Period — e.g. 1 x 5 years or 2 x 3 years\n5. Renewal Notice Deadline — last date to notify of renewal intent\n6. For FRANCHISE AGREEMENTS specifically extract Annexure A item 7 (Commencement Date) and item 8 (Duration/Period)\nAlso extract: physical store/shop premises address only (shop number and street, not head office), all party names and roles, and the governing clause for each date found."
+    _expiries_json_structure = (
+        '{\n'
+        '  "document_context": {\n'
+        '    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled \'PREMISES\', \'Shop No\', \'Store Location\', or \'Location\' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",\n'
+        '    "parties": [\n'
+        '      {"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}\n'
+        '    ],\n'
+        '    "obligations": [\n'
+        '      {\n'
+        '        "party": "Party name",\n'
+        '        "category": "Financial | Operational | Maintenance | Compliance",\n'
+        '        "obligation": "Description of the obligation",\n'
+        '        "clause_reference": "e.g. 4.2.3 or Schedule 1"\n'
+        '      }\n'
+        '    ]\n'
+        '  },\n'
+        '  "expiries": [\n'
+        '    ' + example_expiries + '\n'
+        '  ]\n'
+        '}'
+    )
     reduce_task = f"""You MUST produce a SEPARATE expiry entry for EACH document marked with --- DOCUMENT START ---.
 For each document entry you MUST populate:
 - commencement_date (never leave null if the document has a start date)
@@ -499,25 +498,7 @@ Each document has different dates:
 These dates WILL be different. Produce one object per document in the expiries array.
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
 Output ONLY valid JSON matching this exact structure:
-{{
-  "document_context": {{
-    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
-      {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
-      }}
-    ]
-  }},
-  "expiries": [
-    {example_expiries}
-  ]
-}}
+{_expiries_json_structure}
 If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Perform strict date arithmetic if the contract specifies a start date and term duration. Return ONLY the JSON object."""
 
     def legacy_op():
@@ -530,25 +511,7 @@ DOCUMENTS TEXT:
 INSTRUCTIONS:
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
 Output ONLY valid JSON matching this exact structure:
-{{
-  "document_context": {{
-    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
-      {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
-      }}
-    ]
-  }},
-  "expiries": [
-    {example_expiries}
-  ]
-}}
+{_expiries_json_structure}
 
 If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Perform strict date arithmetic if the contract specifies a start date and term duration. Return ONLY the JSON object."""
         resp = groq_client.chat.completions.create(
@@ -616,85 +579,59 @@ async def gap_analysis(payload, current_user: Optional[models.User] = Depends(ge
             franchise_filename = fname
 
     map_task = "Extract all obligations, restrictions, and operational requirements from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., all party names and roles, and obligations per party."
-    reduce_task = f"""Cross-reference franchise obligations against lease provisions and list every misalignment found. Flag uncertain matches explicitly. Detect which document is the lease and which is the franchise agreement based on content, not just filename order.
-Output exactly this JSON structure:
-{{
-  "detected_lease": "{lease_filename}",
-  "detected_franchise": "{franchise_filename}",
-  "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
-  "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
-  "document_context": {{
-    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
-      {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
-      }}
-    ]
-  }},
-  "gaps": [
-    {{
-      "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
-      "franchise_requirement": "What does the franchise demand?",
-      "lease_provision": "What does the lease actually say?",
-      "status": "RISK | MATCH | WARNING",
-      "clause_reference_lease": "e.g. 4.2",
-      "clause_reference_franchise": "e.g. 5.1"
-    }}
-  ]
-}}
-
-If only one document type is uploaded, map whatever you can and put 'null' for the missing one. Return ONLY valid JSON."""
+    _gap_json_structure = (
+        '{\n'
+        '  "detected_lease": "' + lease_filename + '",\n'
+        '  "detected_franchise": "' + franchise_filename + '",\n'
+        '  "lease_key_terms": { "term": "...", "expiry": "...", "permitted_use": "..." },\n'
+        '  "franchise_key_terms": { "term": "...", "expiry": "...", "permitted_use": "..." },\n'
+        '  "document_context": {\n'
+        '    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled \'PREMISES\', \'Shop No\', \'Store Location\', or \'Location\' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",\n'
+        '    "parties": [\n'
+        '      {"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}\n'
+        '    ],\n'
+        '    "obligations": [\n'
+        '      {\n'
+        '        "party": "Party name",\n'
+        '        "category": "Financial | Operational | Maintenance | Compliance",\n'
+        '        "obligation": "Description of the obligation",\n'
+        '        "clause_reference": "e.g. 4.2.3 or Schedule 1"\n'
+        '      }\n'
+        '    ]\n'
+        '  },\n'
+        '  "gaps": [\n'
+        '    {\n'
+        '      "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",\n'
+        '      "franchise_requirement": "What does the franchise demand?",\n'
+        '      "lease_provision": "What does the lease actually say?",\n'
+        '      "status": "RISK | MATCH | WARNING",\n'
+        '      "clause_reference_lease": "e.g. 4.2",\n'
+        '      "clause_reference_franchise": "e.g. 5.1"\n'
+        '    }\n'
+        '  ]\n'
+        '}'
+    )
+    reduce_task = (
+        "Cross-reference franchise obligations against lease provisions and list every misalignment found. "
+        "Flag uncertain matches explicitly. Detect which document is the lease and which is the franchise agreement "
+        "based on content, not just filename order.\n"
+        "Output exactly this JSON structure:\n"
+        + _gap_json_structure
+        + "\n\nIf only one document type is uploaded, map whatever you can and put 'null' for the missing one. Return ONLY valid JSON."
+    )
 
     def legacy_op():
         old_full_text = str(full_text)[:24000]
-        prompt = f"""You are a master commercial real estate and franchise attorney.
-The user has uploaded multiple documents. Your job is to automatically detect which is the Franchise Agreement and which is the Lease Agreement. Then, cross-reference them to find gaps, conflicts, and risks. 
-Provide key terms and a critical mismatch report.
-
-DOCUMENTS TEXT:
-{old_full_text}
-
-INSTRUCTIONS:
-Output exactly this JSON structure:
-{{
-  "detected_lease": "{lease_filename}",
-  "detected_franchise": "{franchise_filename}",
-  "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
-  "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
-  "document_context": {{
-    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
-      {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
-      }}
-    ]
-  }},
-  "gaps": [
-    {{
-      "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
-      "franchise_requirement": "What does the franchise demand?",
-      "lease_provision": "What does the lease actually say?",
-      "status": "RISK | MATCH | WARNING",
-      "clause_reference_lease": "e.g. 4.2",
-      "clause_reference_franchise": "e.g. 5.1"
-    }}
-  ]
-}}
-
-If only one document type is uploaded, map whatever you can and put 'null' for the missing one.
-Return ONLY valid JSON."""
+        prompt = (
+            "You are a master commercial real estate and franchise attorney.\n"
+            "The user has uploaded multiple documents. Your job is to automatically detect which is the Franchise Agreement and which is the Lease Agreement. Then, cross-reference them to find gaps, conflicts, and risks.\n"
+            "Provide key terms and a critical mismatch report.\n\n"
+            "DOCUMENTS TEXT:\n"
+            + old_full_text
+            + "\n\nINSTRUCTIONS:\nOutput exactly this JSON structure:\n"
+            + _gap_json_structure
+            + "\n\nIf only one document type is uploaded, map whatever you can and put 'null' for the missing one.\nReturn ONLY valid JSON."
+        )
         resp = groq_client.chat.completions.create(
             model='llama-3.3-70b-versatile',
             messages=[{'role': 'user', 'content': prompt}],
@@ -861,61 +798,60 @@ Return ONLY the raw JSON object."""
     def legacy_op():
         doc_a_old = str(doc_texts[payload.doc_id_a])[:9000]
         doc_b_old = str(doc_texts[payload.doc_id_b])[:9000]
-        prompt = f"""You are a master legal analyst conducting a forensic "redline" comparison between an original document and a modified draft. 
-    
-DOCUMENT A (Original / Base Document):
-{doc_a_old}
-
-DOCUMENT B (Modified / Counter-party Draft):
-{doc_b_old}
-
-INSTRUCTIONS:
-Carefully compare the documents. Output a structured forensic difference report in valid JSON.
-Ignore cosmetic or stylistic wording changes (like whitespace or font). Focus strictly on substantive legal/obligational changes.
-
-JSON SCHEMA REQUIREMENT:
-{{
-  "document_context": {{
-    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
-      {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
-      }}
-    ]
-  }},
-  "risk_summary": "A 2-3 sentence executive summary explaining how the risk profile has shifted from Document A to Document B.",
-  "changes": [
-    {{
-      "type": "ADDED",
-      "original_text": null,
-      "new_text": "Exact text added to Document B",
-      "impact": "High/Med/Low impact: Short explanation of legal implication.",
-      "clause_reference": "e.g. 4.2"
-    }},
-    {{
-      "type": "DELETED",
-      "original_text": "Exact text removed from Document A",
-      "new_text": null,
-      "impact": "High/Med/Low impact: Short explanation of legal implication.",
-      "clause_reference": "e.g. 4.2"
-    }},
-    {{
-      "type": "MODIFIED",
-      "original_text": "Exact original clause in Document A",
-      "new_text": "Exact new clause in Document B",
-      "impact": "High/Med/Low impact: Short explanation of how the modification shifts obligation.",
-      "clause_reference": "e.g. 4.2"
-    }}
-  ]
-}}
-
-Return ONLY the raw JSON object. Do not wrap in markdown code blocks."""
+        _compare_json_schema = (
+            '{\n'
+            '  "document_context": {\n'
+            '    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled \'PREMISES\', \'Shop No\', \'Store Location\', or \'Location\' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",\n'
+            '    "parties": [\n'
+            '      {"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}\n'
+            '    ],\n'
+            '    "obligations": [\n'
+            '      {\n'
+            '        "party": "Party name",\n'
+            '        "category": "Financial | Operational | Maintenance | Compliance",\n'
+            '        "obligation": "Description of the obligation",\n'
+            '        "clause_reference": "e.g. 4.2.3 or Schedule 1"\n'
+            '      }\n'
+            '    ]\n'
+            '  },\n'
+            '  "risk_summary": "A 2-3 sentence executive summary explaining how the risk profile has shifted from Document A to Document B.",\n'
+            '  "changes": [\n'
+            '    {\n'
+            '      "type": "ADDED",\n'
+            '      "original_text": null,\n'
+            '      "new_text": "Exact text added to Document B",\n'
+            '      "impact": "High/Med/Low impact: Short explanation of legal implication.",\n'
+            '      "clause_reference": "e.g. 4.2"\n'
+            '    },\n'
+            '    {\n'
+            '      "type": "DELETED",\n'
+            '      "original_text": "Exact text removed from Document A",\n'
+            '      "new_text": null,\n'
+            '      "impact": "High/Med/Low impact: Short explanation of legal implication.",\n'
+            '      "clause_reference": "e.g. 4.2"\n'
+            '    },\n'
+            '    {\n'
+            '      "type": "MODIFIED",\n'
+            '      "original_text": "Exact original clause in Document A",\n'
+            '      "new_text": "Exact new clause in Document B",\n'
+            '      "impact": "High/Med/Low impact: Short explanation of how the modification shifts obligation.",\n'
+            '      "clause_reference": "e.g. 4.2"\n'
+            '    }\n'
+            '  ]\n'
+            '}'
+        )
+        prompt = (
+            'You are a master legal analyst conducting a forensic "redline" comparison between an original document and a modified draft.\n\n'
+            "DOCUMENT A (Original / Base Document):\n"
+            + doc_a_old
+            + "\n\nDOCUMENT B (Modified / Counter-party Draft):\n"
+            + doc_b_old
+            + "\n\nINSTRUCTIONS:\nCarefully compare the documents. Output a structured forensic difference report in valid JSON.\n"
+            "Ignore cosmetic or stylistic wording changes (like whitespace or font). Focus strictly on substantive legal/obligational changes.\n\n"
+            "JSON SCHEMA REQUIREMENT:\n"
+            + _compare_json_schema
+            + "\n\nReturn ONLY the raw JSON object. Do not wrap in markdown code blocks."
+        )
         resp = groq_client.chat.completions.create(
             model='llama-3.3-70b-versatile',
             messages=[{'role': 'user', 'content': prompt}],
@@ -926,8 +862,10 @@ Return ONLY the raw JSON object. Do not wrap in markdown code blocks."""
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return json.loads(raw)
 
+
     cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_compare.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
+
 
 
 async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
