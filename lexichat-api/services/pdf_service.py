@@ -20,10 +20,10 @@ def safe(val):
 def _add_branding(canvas, doc):
     canvas.saveState()
     canvas.setFont('Helvetica-Bold', 10)
-    canvas.setFillColorHex('#1a56db')
+    canvas.setFillColor(colors.HexColor('#1a56db'))
     canvas.drawString(cm, A4[1] - cm, "REM Leases")
     canvas.setFont('Helvetica', 10)
-    canvas.setFillColorHex('#666666')
+    canvas.setFillColor(colors.HexColor('#666666'))
     date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     canvas.drawRightString(A4[0] - cm, A4[1] - cm, date_str)
     
