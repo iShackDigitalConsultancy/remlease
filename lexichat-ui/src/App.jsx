@@ -1750,15 +1750,17 @@ END:VCALENDAR`;
                         Identified Clause Modifications
                      </h3>
                      
-                     {compareResult.changes?.length === 0 ? (
-                        <div className="text-center p-12 text-slate-500 text-sm border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50">No substantive legal changes found between these documents.</div>
-                     ) : (
-                        compareResult.changes?.map((change, idx) => (
-                           <div key={idx} className="bg-white border border-slate-200 shadow-sm rounded-xl text-sm overflow-hidden">
-                              <div className={`px-4 py-2 flex justify-between items-center border-b border-slate-200 ${change.type === 'ADDED' ? 'bg-green-50 text-green-700' : change.type === 'DELETED' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
-                                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md ${change.type === 'ADDED' ? 'bg-green-100' : change.type === 'DELETED' ? 'bg-red-100' : 'bg-amber-100'}`}>
-                                    {change.type}
-                                 </span>
+                     {(() => {
+                        const items = compareResult.differences || compareResult.changes || compareResult.items || [];
+                        return items.length === 0 ? (
+                           <div className="text-center p-12 text-slate-500 text-sm border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50">No substantive legal changes found between these documents.</div>
+                        ) : (
+                           items.map((change, idx) => (
+                              <div key={idx} className="bg-white border border-slate-200 shadow-sm rounded-xl text-sm overflow-hidden">
+                                 <div className={`px-4 py-2 flex justify-between items-center border-b border-slate-200 ${change.type === 'ADDED' ? 'bg-green-50 text-green-700' : change.type === 'DELETED' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md ${change.type === 'ADDED' ? 'bg-green-100' : change.type === 'DELETED' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                                       {change.type || change.category || 'MODIFIED'}
+                                    </span>
                               </div>
                               
                               <div className="p-0 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-slate-200">
@@ -1786,7 +1788,7 @@ END:VCALENDAR`;
                               </div>
                            </div>
                         ))
-                     )}
+                     )})();}
                   </div>
                 </div>
               ) : (

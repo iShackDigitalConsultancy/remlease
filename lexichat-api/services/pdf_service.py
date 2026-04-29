@@ -331,7 +331,7 @@ def build_compare_pdf(report_data, workspace_name, document_names) -> BytesIO:
     story.append(Paragraph(workspace_name if workspace_name else "Portfolio", subtitle_style))
     story.append(Spacer(1, 1*cm))
     
-    differences = report_data.get("differences", report_data.get("items", []))
+    differences = report_data.get("differences", report_data.get("changes", report_data.get("items", [])))
     
     if not differences:
         data_str = safe(report_data)
