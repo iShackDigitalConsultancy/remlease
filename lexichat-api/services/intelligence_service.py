@@ -460,12 +460,14 @@ For each document entry you MUST populate:
   - Payment obligations
   If no renewal option exists set to null.
 - renewal_deadline: Calculate as the LAST possible date to give renewal notice. If the clause states notice must be given 'not less than X months prior', calculate expiry_date minus X months. If clause states a range (e.g. 'not less than 6 and not more than 9 months prior'), use the 6-month deadline (latest possible date) as the renewal_deadline. Example: expiry 2028-07-01, 6 month notice required = renewal_deadline 2028-01-01
-- action_required: Be specific and document-specific. For franchise renewals include:
-  - The notice window (e.g. between X and Y date)
-  - Any conditions (no unresolved breaches, payment of renewal fee)
-  - The renewal fee if specified
-  Example: 'Franchisee must serve written renewal notice between [earliest] and [latest], with no unresolved breaches and payment of renewal fee per Annexure A'. If there is no renewal option (N/A or None stated), the action should be 'No renewal option — tenant must vacate or renegotiate new lease'.
-For FRANCHISE AGREEMENTS: commencement from Annexure A item 7, expiry = commencement + item 8 duration.
+- action_required: For franchise renewals with a notice window clause stating 'not less than X and not more than Y months':
+  - Earliest notice date = expiry minus Y months
+  - Latest notice date = expiry minus X months
+  Example: expiry 2028-07-01, clause says 'not less than 6 and not more than 9 months':
+  - Earliest = 2028-07-01 minus 9 months = 2027-10-01
+  - Latest = 2028-07-01 minus 6 months = 2028-01-01
+  State the window as: 'between 2027-10-01 and 2028-01-01'. Also include any conditions (no unresolved breaches, payment of renewal fee). If there is no renewal option (N/A or None stated), the action should be 'No renewal option — tenant must vacate or renegotiate new lease'.
+For FRANCHISE AGREEMENTS: expiry_date must be calculated from the franchise commencement date in Annexure A item 7 plus the duration in item 8. Do NOT copy the lease expiry date. Example: commencement 2023-07-01 plus 5 years = expiry 2028-07-01 exactly. Note: 5 years from 1 July 2023 is 1 July 2028, NOT 30 June 2028.
 Do NOT copy or duplicate dates across entries.
 Each document has different dates:
 - For a FRANCHISE AGREEMENT: commencement date is in Annexure A item 7, expiry = commencement plus duration from item 8
