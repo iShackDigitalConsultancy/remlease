@@ -296,7 +296,7 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
       "commencement_date": "YYYY-MM-DD",
       "expiry_date": "YYYY-MM-DD",
       "beneficial_occupation_date": "YYYY-MM-DD or null",
-      "renewal_option": "string",
+      "renewal_option": "If document states N/A, None, or Nil — return 'None'. If document has a renewal option return the exact terms e.g. '1 x 5 years'. Never return 'Not specified' if the document explicitly addresses renewal.",
       "escalation_rate": "string",
       "permitted_use": "string",
       "security_deposit": "string",
@@ -443,15 +443,16 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     '    }'
 )
 
-    map_task = "Extract all dates, deadlines, and timeframes from this section. You MUST extract ALL of these specific fields if present:\n1. Commencement Date — when the lease/agreement starts\n2. Beneficial Occupation Date — when tenant gets early access\n3. Expiry Date / Lease End Date — when it ends\n4. Renewal Option Period — e.g. 1 x 5 years or 2 x 3 years\n5. Renewal Notice Deadline — last date to notify of renewal intent\n6. For FRANCHISE AGREEMENTS specifically extract Annexure A item 7 (Commencement Date) and item 8 (Duration/Period)\nAlso extract: physical store/shop premises address only (shop number and street, not head office), all party names and roles, and the governing clause for each date found."
+    map_task = "Extract all dates, deadlines, and timeframes from this section. You MUST extract ALL of these specific fields if present:\n1. Commencement Date — when the lease/agreement starts\n2. Beneficial Occupation Date — when tenant gets early access\n3. Expiry Date / Lease End Date — when it ends\n4. Renewal Option Period — e.g. 1 x 5 years or 2 x 3 years\n5. Renewal Notice Deadline — last date to notify of renewal intent\n6. For FRANCHISE AGREEMENTS specifically extract Annexure A item 7 (Commencement Date) and item 8 (Duration/Period)\nAlso extract: physical store/shop premises address only (shop number and street, not head office), all party names and roles, and the governing clause for each date found. When extracting renewal information, specifically look for:\n- Renewal option clauses or schedules\n- Any explicit N/A, None, or Nil statements about renewal\n- The difference between silence on renewal (not mentioned) vs explicit exclusion (N/A stated)\nThis distinction is legally critical."
     reduce_task = f"""You MUST produce a SEPARATE expiry entry for EACH document marked with --- DOCUMENT START ---.
 For each document entry you MUST populate:
 - commencement_date (never leave null if the document has a start date)
 - beneficial_occupation_date (null if absent)
 - expiry_date (MUST be a date in YYYY-MM-DD format. This is the date the agreement ends. NEVER leave this null if the document has an end date.)
 - lease_end_date (same as expiry_date if not separately stated)
-- renewal_option_period (MUST be a text description like '1 x 5 years' or '2 x 3 years'. NEVER put a date here. If there is no renewal option, set to null.)
+- renewal_option_period (MUST be a text description like '1 x 5 years' or '2 x 3 years'. NEVER put a date here. If there is no renewal option, set to null. CRITICAL: If the document explicitly states 'N/A', 'None', 'Nil', or 'No renewal option' for the renewal clause, return exactly 'None — no renewal option' rather than null or 'Not specified'. Only return null if the document is genuinely silent on renewal.)
 - renewal_deadline (calculate as 6 months before expiry if clause states 6 month notice period)
+- action_required: If there is no renewal option (N/A or None stated), the action should be 'No renewal option — tenant must vacate or renegotiate new lease' not 'Review and renewal of lease agreement'.
 For FRANCHISE AGREEMENTS: commencement from Annexure A item 7, expiry = commencement + item 8 duration.
 Do NOT copy or duplicate dates across entries.
 Each document has different dates:
