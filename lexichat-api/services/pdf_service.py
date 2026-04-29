@@ -72,6 +72,10 @@ def build_expiries_pdf(report_data, workspace_name, document_names) -> BytesIO:
         story.append(Paragraph(f"<b>Action Required:</b> {action_req}", ParagraphStyle('Action', parent=styles['Normal'], backColor=colors.navajowhite, borderColor=colors.orange, borderWidth=1, borderPadding=5)))
         story.append(Spacer(1, 0.3*cm))
         
+        if item.get("renewal_conditions") and item.get("renewal_conditions") != "null":
+            story.append(Paragraph(f"<b>Renewal Conditions:</b> {item.get('renewal_conditions')}", ParagraphStyle('Conditions', parent=styles['Normal'], backColor=colors.lightyellow, borderColor=colors.orange, borderWidth=1, borderPadding=5)))
+            story.append(Spacer(1, 0.3*cm))
+        
         clause = item.get("clause", "")
         if clause:
             story.append(Paragraph(f"<i>Governing Clause: {clause}</i>", styles['Normal']))

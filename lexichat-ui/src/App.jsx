@@ -2011,6 +2011,14 @@ END:VCALENDAR`;
                                   {exp.renewal_deadline || "Not Specified"}
                                 </div>
                              </div>
+                             {exp.renewal_conditions && exp.renewal_conditions !== 'null' && (
+                              <div className="mt-2 pt-2 border-t border-slate-100">
+                                <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Renewal Conditions</p>
+                                <p className="text-xs text-slate-700 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-relaxed">
+                                  {exp.renewal_conditions}
+                                </p>
+                              </div>
+                             )}
                            </div>
                            <div className="lg:col-span-2 space-y-4">
                               <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-200/60">
