@@ -423,6 +423,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     '      "expiry_date": "YYYY-MM-DD",\n'
     '      "lease_end_date": "YYYY-MM-DD",\n'
     '      "renewal_option_period": "e.g. 1 x 5 years — text only, never a date",\n'
+    '      "renewal_conditions": "Any conditions that must be met to exercise renewal option, e.g. no unresolved breaches, payment of renewal fee. null if no renewal option.",\n'
     '      "renewal_deadline": "YYYY-MM-DD",\n'
     '      "clause": "Governing clause text",\n'
     '      "clause_reference": "e.g. 12.1",\n'
@@ -436,6 +437,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     '      "expiry_date": "YYYY-MM-DD",\n'
     '      "lease_end_date": "YYYY-MM-DD",\n'
     '      "renewal_option_period": "e.g. 1 x 5 years — text only, never a date",\n'
+    '      "renewal_conditions": "Any conditions that must be met to exercise renewal option, e.g. no unresolved breaches, payment of renewal fee. null if no renewal option.",\n'
     '      "renewal_deadline": "YYYY-MM-DD",\n'
     '      "clause": "Governing clause text",\n'
     '      "clause_reference": "e.g. 12.1",\n'
@@ -451,8 +453,18 @@ For each document entry you MUST populate:
 - expiry_date (MUST be a date in YYYY-MM-DD format. This is the date the agreement ends. NEVER leave this null if the document has an end date.)
 - lease_end_date (same as expiry_date if not separately stated)
 - renewal_option_period (MUST be a text description like '1 x 5 years' or '2 x 3 years'. NEVER put a date here. If there is no renewal option, set to null. CRITICAL: If the document explicitly states 'N/A', 'None', 'Nil', or 'No renewal option' for the renewal clause, return exactly 'None — no renewal option' rather than null or 'Not specified'. Only return null if the document is genuinely silent on renewal.)
-- renewal_deadline (calculate as 6 months before expiry if clause states 6 month notice period)
-- action_required: If there is no renewal option (N/A or None stated), the action should be 'No renewal option — tenant must vacate or renegotiate new lease' not 'Review and renewal of lease agreement'.
+- renewal_conditions: Extract any conditions attached to the renewal option such as:
+  - No unresolved breaches
+  - Written notice requirements
+  - Renewal fee amounts
+  - Payment obligations
+  If no renewal option exists set to null.
+- renewal_deadline: Calculate as the LAST possible date to give renewal notice. If the clause states notice must be given 'not less than X months prior', calculate expiry_date minus X months. If clause states a range (e.g. 'not less than 6 and not more than 9 months prior'), use the 6-month deadline (latest possible date) as the renewal_deadline. Example: expiry 2028-07-01, 6 month notice required = renewal_deadline 2028-01-01
+- action_required: Be specific and document-specific. For franchise renewals include:
+  - The notice window (e.g. between X and Y date)
+  - Any conditions (no unresolved breaches, payment of renewal fee)
+  - The renewal fee if specified
+  Example: 'Franchisee must serve written renewal notice between [earliest] and [latest], with no unresolved breaches and payment of renewal fee per Annexure A'. If there is no renewal option (N/A or None stated), the action should be 'No renewal option — tenant must vacate or renegotiate new lease'.
 For FRANCHISE AGREEMENTS: commencement from Annexure A item 7, expiry = commencement + item 8 duration.
 Do NOT copy or duplicate dates across entries.
 Each document has different dates:
@@ -460,6 +472,7 @@ Each document has different dates:
 - For a LEASE AGREEMENT: commencement is in clause 3.1 or the schedule, expiry in clause 3.2
 These dates WILL be different. Produce one object per document in the expiries array.
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
+If multiple documents are provided and their expiry dates differ by 1-30 days, add a note in action_required flagging this as a potential legal inconsistency requiring client attention.
 Output ONLY valid JSON matching this exact structure:
 {{
   "document_context": {{
