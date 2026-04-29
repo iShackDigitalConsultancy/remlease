@@ -109,7 +109,11 @@ def build_fundamental_terms_pdf(report_data, workspace_name, document_names) -> 
     
     for i, ft in enumerate(ft_items):
         if i > 0:
-            story.append(PageBreak())
+            story.append(Spacer(1, 1*cm))
+            story.append(HRFlowable(
+                width="100%", thickness=2,
+                color=colors.HexColor('#1a56db')))
+            story.append(Spacer(1, 0.5*cm))
             
         doc_name = ft.get("document")
         doc_type = ft.get("doc_type")
@@ -209,26 +213,7 @@ def build_fundamental_terms_pdf(report_data, workspace_name, document_names) -> 
             story.append(t3)
             story.append(Spacer(1, 0.5*cm))
         
-        pd = ft.get("payment_details")
-        if pd and any(pd.values()):
-            story.append(Paragraph("<b>Banking Details</b>", styles['Heading2']))
-            banking_data = [
-                [Paragraph("<b>Bank</b>", styles['Normal']), Paragraph(safe(pd.get("bank")), styles['Normal'])],
-                [Paragraph("<b>Branch</b>", styles['Normal']), Paragraph(safe(pd.get("branch")), styles['Normal'])],
-                [Paragraph("<b>Branch Code</b>", styles['Normal']), Paragraph(safe(pd.get("branch_code")), styles['Normal'])],
-                [Paragraph("<b>Account Holder</b>", styles['Normal']), Paragraph(safe(pd.get("account_holder")), styles['Normal'])],
-                [Paragraph("<b>Account No</b>", styles['Normal']), Paragraph(safe(pd.get("account_number")), styles['Normal'])],
-                [Paragraph("<b>Account Type</b>", styles['Normal']), Paragraph(safe(pd.get("account_type")), styles['Normal'])]
-            ]
-            t_bank = Table(banking_data, colWidths=[6*cm, 12*cm])
-            t_bank.setStyle(TableStyle([
-                ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
-                ('VALIGN', (0,0), (-1,-1), 'TOP'),
-                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-                ('PADDING', (0,0), (-1,-1), 6)
-            ]))
-            story.append(t_bank)
-            story.append(Spacer(1, 0.5*cm))
+
 
         # D) Special Conditions
         special_conds = ft.get("special_conditions", [])

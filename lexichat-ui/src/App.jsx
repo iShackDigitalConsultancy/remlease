@@ -2172,18 +2172,7 @@ END:VCALENDAR`;
                             <div className="flex justify-between items-center pb-2 border-b border-slate-50"><span className="text-[11px] font-bold text-slate-500 uppercase">Escalation Rate</span><span className="text-sm font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{safeStr(termData?.escalation_rate)}</span></div>
                             <div className="flex justify-between items-center pb-2 border-b border-slate-50"><span className="text-[11px] font-bold text-slate-500 uppercase">Suretyship</span><span className="text-sm font-medium text-slate-700">{safeStr(termData?.suretyship)}</span></div>
                           </div>
-                          
-                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                             <span className="block text-[10px] uppercase font-bold text-slate-400 mb-2">Banking Details</span>
-                             <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div><span className="text-slate-500">Bank:</span> <span className="font-medium">{safeStr(termData?.payment_details?.bank)}</span></div>
-                                <div><span className="text-slate-500">Branch:</span> <span className="font-medium">{safeStr(termData?.payment_details?.branch)}</span></div>
-                                <div><span className="text-slate-500">Branch Code:</span> <span className="font-medium">{safeStr(termData?.payment_details?.branch_code)}</span></div>
-                                <div><span className="text-slate-500">Acc Holder:</span> <span className="font-medium">{safeStr(termData?.payment_details?.account_holder)}</span></div>
-                                <div><span className="text-slate-500">Account:</span> <span className="font-medium">{safeStr(termData?.payment_details?.account_number)}</span></div>
-                                <div><span className="text-slate-500">Type:</span> <span className="font-medium">{safeStr(termData?.payment_details?.account_type)}</span></div>
-                             </div>
-                          </div>
+
                         </div>
                      </div>
 
