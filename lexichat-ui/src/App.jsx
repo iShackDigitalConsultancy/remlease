@@ -1383,7 +1383,7 @@ END:VCALENDAR`;
                                          report_type: 'portfolio',
                                          report_data: {
                                              portfolio_data: portfolioData,
-                                             firm_name: activeUser?.firm_name 
+                                             firm_name: user?.firm_name 
                                                  || 'Property Portfolio'
                                          },
                                          workspace_name: 'All Workspaces',
