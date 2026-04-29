@@ -177,13 +177,7 @@ function InnerApp() {
                if (data.status === 'processing') {
                    setPipelineProgress(data.message);
                } else if (data.status === 'complete') {
-                   const sorted = data.data.sort((a,b) => {
-                       if (!a.expiry_date && !b.expiry_date) return 0;
-                       if (!a.expiry_date) return 1;
-                       if (!b.expiry_date) return -1;
-                       return new Date(a.expiry_date) - new Date(b.expiry_date);
-                   });
-                   setPortfolioData(sorted);
+                   setPortfolioData(data.data);
                } else if (data.status === 'error') {
                    throw new Error(data.message);
                }
@@ -1380,6 +1374,7 @@ END:VCALENDAR`;
                                         'Content-Type': 'application/json'}
                                      : {'x-session-id': sessionId,
                                         'Content-Type': 'application/json'};
+                                 console.log('portfolioData being sent:', JSON.stringify(portfolioData).slice(0,500));
                                  const res = await fetch(
                                      `${API_BASE}/export/pdf`, {
                                      method: 'POST',
@@ -1404,7 +1399,8 @@ END:VCALENDAR`;
                                  a.click();
                                  URL.revokeObjectURL(url);
                              } catch (err) {
-                                 alert('Failed to export portfolio PDF.');
+                                 console.error('Portfolio PDF error:', err);
+                                 alert('Failed to export portfolio PDF: ' + err.message);
                              }
                          }}
                          className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:shadow transition-all"
