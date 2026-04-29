@@ -1098,7 +1098,10 @@ END:VCALENDAR`;
 
           {activeCase && (
             <div className="pt-4 border-t border-slate-200 flex flex-col">
-              <h3 className="text-[10px] font-bold text-brand-blue uppercase tracking-widest mb-3 px-2 truncate" title={activeCase.name}>Lease Files in: {activeCase.name}</h3>
+              <h3 className="text-[10px] font-bold text-brand-blue uppercase tracking-widest mb-1 px-2 truncate" title={activeCase.name}>Lease Files in: {activeCase.name}</h3>
+              <p className="text-[10px] text-slate-400 px-2 mb-3">
+                Click to preview · Reports use all documents
+              </p>
               
               <div className="flex flex-col space-y-3 mb-6">
                 {library.map(doc => (
@@ -1640,26 +1643,42 @@ END:VCALENDAR`;
               </button>
             </form>
             
-            <div className="flex justify-between items-center mt-3 px-1">
-              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">REM-Leases AI can hallucinate. Verify claims against primary sources.</p>
+            <div className="flex justify-between items-end mt-3 px-1">
+              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide mb-2">REM-Leases AI can hallucinate. Verify claims against primary sources.</p>
               
-              <div className="flex items-center gap-2">
-                <button 
-                  type="button"
-                  onClick={() => executeExpiryExtraction(false)}
-                  disabled={!activeCase || library.length === 0 || isExtractingExpiries}
-                  className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
-                >
-                  {isExtractingExpiries ? <><Loader2 size={12} className="animate-spin" /> Scanning...</> : <><Clock size={12} /> Scan Expiries/Renewals</>}
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => executeTimelineGeneration(false)}
-                  disabled={!activeCase || library.length === 0 || isGeneratingTimeline}
-                  className="flex items-center gap-1.5 text-xs font-bold text-white bg-brand-accent hover:bg-brand-accent-dark px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed"
-                >
-                  {isGeneratingTimeline ? <><Loader2 size={12} className="animate-spin" /> Extracting...</> : <><FileText size={12} /> Extract Fundamental Terms</>}
-                </button>
+              <div className="flex flex-col items-end gap-2">
+                {library && library.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-blue/5 border border-brand-blue/10 rounded-lg text-[11px] text-brand-blue/80">
+                    <FileText size={11} className="shrink-0" />
+                    <span>
+                      Analysing all{" "}
+                      <span className="font-bold">
+                        {library.length} document{library.length !== 1 ? "s" : ""}
+                      </span>
+                      {" "}in this workspace
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button"
+                    title="Scan all documents in this workspace"
+                    onClick={() => executeExpiryExtraction(false)}
+                    disabled={!activeCase || library.length === 0 || isExtractingExpiries}
+                    className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  >
+                    {isExtractingExpiries ? <><Loader2 size={12} className="animate-spin" /> Scanning...</> : <><Clock size={12} /> Scan Workspace Expiries</>}
+                  </button>
+                  <button 
+                    type="button"
+                    title="Extract fundamental terms from all documents in this workspace"
+                    onClick={() => executeTimelineGeneration(false)}
+                    disabled={!activeCase || library.length === 0 || isGeneratingTimeline}
+                    className="flex items-center gap-1.5 text-xs font-bold text-white bg-brand-accent hover:bg-brand-accent-dark px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingTimeline ? <><Loader2 size={12} className="animate-spin" /> Extracting...</> : <><FileText size={12} /> Extract Workspace Terms</>}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
