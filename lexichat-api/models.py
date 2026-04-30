@@ -91,3 +91,9 @@ class PDFExportPayload(BaseModel):
     report_data: dict
     workspace_name: str = "Portfolio"
     document_names: list = []
+
+from typing import List
+
+class IntelligenceReportRequest(BaseModel):
+    doc_ids: List[str]
+    force_refresh: bool = False

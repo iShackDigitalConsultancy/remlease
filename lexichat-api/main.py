@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 import os
+import json
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -157,6 +158,113 @@ class TimelineExtractionRequest(BaseModel):
 @app.post("/api/extract-timeline")
 async def extract_timeline(payload: TimelineExtractionRequest, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
     return await intelligence_service.extract_timeline(payload, current_user, x_session_id, db)
+
+@app.post("/api/workspace/{workspace_id}/intelligence-report")
+async def generate_intelligence_report(
+    workspace_id: str,
+    payload: models.IntelligenceReportRequest,
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+    x_session_id: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    import logging
+    logger = logging.getLogger(__name__)
+    from services import intelligence_engine
+    import os
+    from dependencies import UPLOAD_DIR
+    
+    # Check cache first
+    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_intelligence_report.json")
+    if not payload.force_refresh and os.path.exists(cache_path):
+        with open(cache_path, "r") as f:
+            return json.load(f)
+    
+    # Verify workspace access
+    if current_user:
+        workspace = db.query(models.Workspace).filter(
+            models.Workspace.id == workspace_id,
+            models.Workspace.firm_id == current_user.firm_id
+        ).first()
+    else:
+        workspace = db.query(models.Workspace).filter(
+            models.Workspace.id == workspace_id,
+            models.Workspace.session_id == x_session_id
+        ).first()
+    
+    if not workspace:
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+        
+    logger.info(f"Generating intelligence report for workspace {workspace_id}")
+    logger.info(f"Documents requested: {payload.doc_ids}")
+    
+    # Build full_text from doc_ids
+    full_text = ""
+    filenames = []
+    missing_docs = []
+    for doc_id in payload.doc_ids:
+        doc = db.query(models.WorkspaceDocument).filter(
+            models.WorkspaceDocument.pinecone_doc_id == doc_id,
+            models.WorkspaceDocument.workspace_id == workspace_id
+        ).first()
+        if not doc:
+            missing_docs.append(doc_id)
+            continue
+        filenames.append(doc.filename)
+        for candidate_id in [doc_id, doc.pinecone_doc_id, doc.id]:
+            if not candidate_id:
+                continue
+            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            if os.path.exists(file_path):
+                with open(file_path, "r") as f:
+                    doc_text = f.read()
+                full_text += (
+                    f"\n\n===== START DOCUMENT: {doc.filename} =====\n"
+                    f"{doc_text}\n"
+                    f"===== END DOCUMENT: {doc.filename} =====\n\n"
+                )
+                break
+                
+    logger.info(f"Documents found: {filenames}")
+    if missing_docs:
+        logger.warning(f"Missing docs: {missing_docs}")
+        
+    if not filenames:
+        raise HTTPException(
+            status_code=404,
+            detail="No valid documents found for this workspace."
+        )
+    
+    if not full_text:
+        raise HTTPException(
+            status_code=404,
+            detail="No document text found. Please upload and process documents first."
+        )
+        
+    doc_map = {
+        "documents": [
+            {"id": did, "filename": fname}
+            for did, fname in zip([d for d in payload.doc_ids if d not in missing_docs], filenames)
+        ]
+    }
+    
+    # Generate report
+    report = await intelligence_engine.generate_intelligence_report(
+        workspace_id=workspace_id,
+        doc_ids=payload.doc_ids,
+        filenames=filenames,
+        full_text=full_text,
+        db=db,
+        doc_map=doc_map
+    )
+    
+    with open(cache_path, "w") as f:
+        json.dump(report, f, indent=2)
+    
+    return report
+
 
 class ExpiryExtractionRequest(BaseModel):
     doc_ids: List[str]
