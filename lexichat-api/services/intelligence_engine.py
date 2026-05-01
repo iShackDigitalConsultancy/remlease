@@ -71,6 +71,32 @@ NEVER return 'Not specified' — if data is absent note which locations were sea
     # PASS 2: REDUCE
     reduce_instruction = """You are a senior occupier intelligence analyst. Using the extracted clause data and existing extraction cache context provided, produce the complete Occupier Intelligence Report.
 
+STRICT ANTI-HALLUCINATION RULES:
+1. NEVER invent numbers. If a figure cannot be found in the source documents or calculated from extracted figures, set the field to null and add an assumption entry explaining why.
+2. premises_size_sqm must come from the PREMISES clause in the lease schedule. Look for 'm²' or 'square metres'.
+3. renewal_fee must be expressed as a formula if stated as a percentage or ratio, not as a calculated amount. Example: '100% of then-current upfront license fee (currently R120,000)'
+4. monthly_variable_estimate and exit_cost_estimate must be null unless explicitly calculable from extracted figures. Add assumption entries instead.
+5. total_occupancy_exposure fields must only contain values derivable from extracted numbers. If turnover is unknown, variable costs cannot be estimated — say so in assumptions.
+
+CONTRADICTIONS RULE:
+Only populate contradictions when you have direct evidence from BOTH documents showing different values for the same field. Both values must appear in source_evidence. NEVER fabricate a contradiction. If you cannot find both values in the source text, do not add a contradiction entry.
+
+SOURCE EVIDENCE RULE:
+The 'text' field in every source_evidence entry must be an EXACT verbatim quote from the document, under 25 words. Do NOT paraphrase or summarise. Do NOT write 'The landlord has approval rights over...' if the contract says 'The Lessee shall not cede, transfer, pledge or in any way dispose of...' Copy the actual words from the contract.
+
+CONFIDENCE CALIBRATION:
+0.95+ = exact figure found verbatim in text
+0.85-0.94 = figure found but requires minor calculation (e.g. date arithmetic)
+0.70-0.84 = figure inferred from multiple clauses with supporting evidence
+below 0.70 = uncertain — flag for review
+Do NOT assign low confidence to values that are clearly and explicitly stated in the document text.
+
+ACTION ITEMS TIMING RULE:
+due_date for action items must be set BEFORE the relevant deadline, not at it.
+For renewal notices: set due_date to the EARLIEST notice date (latest start of notice window).
+Example: if notice window is 2027-10-01 to 2028-01-01, set due_date to 2027-10-01.
+For lease expiry with no renewal: set due_date to 12 months before expiry to allow renegotiation time.
+
 CRITICAL RULES:
 1. field_type must be accurate:
    extracted = directly from document
@@ -78,13 +104,8 @@ CRITICAL RULES:
    inferred = logical conclusion from multiple clauses — include all evidence
 2. Never use 'Not specified' — use missing_critical_fields with searched_locations instead
 3. Every value needs source_evidence with document, clause, text, page
-4. Confidence scores:
-   0.9+ = explicit in text
-   0.7-0.9 = requires inference
-   below 0.7 = uncertain, flag review
-5. requires_human_review = true if any confidence below 0.7 OR any Critical risk
-6. For dependency_map and control_analysis use field_type: inferred and include ALL supporting source evidence
-7. action_items must have specific due dates calculated from extracted dates
+4. requires_human_review = true if any confidence below 0.70 OR any Critical risk
+5. For dependency_map and control_analysis use field_type: inferred and include ALL supporting source evidence
 
 Output ONLY the Intelligence Report JSON. It must match exactly this schema:
 
