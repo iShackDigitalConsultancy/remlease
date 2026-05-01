@@ -412,8 +412,6 @@ def validate_intelligence_report(
             for match in matches:
                 val = match[0] or match[1]
                 if val and float(val) > 10:
-                    report.setdefault("financial_model", {}).setdefault("lease_costs", {})["premises_size_sqm"] = f"{val}m²"
-                    
                     # Find context around the match for source evidence
                     match_pos = full_text.lower().find(val.lower())
                     if match_pos >= 0:
@@ -423,27 +421,22 @@ def validate_intelligence_report(
                         context = " ".join(context.split())[:100]
                     else:
                         context = f"{val}m² (regex match)"
-                    
-                    # Add source evidence for regex-derived value
-                    existing_evidence = report.get("financial_model", {}).get("lease_costs", {}).get("source_evidence", [])
-                    existing_evidence.append({
-                        "document": next((f for f in (filenames or []) if "lease" in f.lower()), filenames[0] if filenames else "Lease"),
-                        "clause": "regex_fallback",
-                        "text": context,
-                        "page": None,
-                        "confidence": 0.5
-                    })
-                    report["financial_model"]["lease_costs"]["source_evidence"] = existing_evidence
-                    
-                    dq = report.setdefault("data_quality", {})
-                    low_conf = dq.get("low_confidence_fields", [])
-                    low_conf.append({
-                        "field": "premises_size_sqm",
+
+                    # Never set uncertain regex values in core fields — store as possible_values for human review instead
+                    possible_values = report.get("possible_values", {})
+                    premises_candidates = possible_values.get("premises_size_sqm", [])
+                    premises_candidates.append({
                         "value": f"{val}m²",
                         "confidence": 0.5,
-                        "reason": "Premises size extracted by fallback regex — manual verification recommended. Regex may have captured wrong m² reference in document."
+                        "reason": "Regex fallback match — context suggests this may not be premises area. Manual verification required.",
+                        "source_evidence": {
+                            "clause": "regex_fallback",
+                            "text": context,
+                            "page": None
+                        }
                     })
-                    report["data_quality"]["low_confidence_fields"] = low_conf
+                    possible_values["premises_size_sqm"] = premises_candidates
+                    report["possible_values"] = possible_values
                     
                     if report["data_quality"].get("overall_confidence", 1.0) > 0.75:
                         report["data_quality"]["overall_confidence"] = 0.75
@@ -452,7 +445,7 @@ def validate_intelligence_report(
                         report["review_status"]["requires_human_review"] = True
                         existing_reason = report["review_status"].get("review_reason", "")
                         report["review_status"]["review_reason"] = (
-                            existing_reason + " Premises size requires manual verification."
+                            existing_reason + " Premises size not confirmed — possible value found via regex but context suggests signage reference, not floor area. Manual verification required."
                         ).strip()
                         
                     break
