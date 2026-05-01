@@ -412,6 +412,27 @@ def validate_intelligence_report(
                 val = match[0] or match[1]
                 if val and float(val) > 10:
                     report.setdefault("financial_model", {}).setdefault("lease_costs", {})["premises_size_sqm"] = f"{val}m²"
+                    
+                    dq = report.setdefault("data_quality", {})
+                    low_conf = dq.get("low_confidence_fields", [])
+                    low_conf.append({
+                        "field": "premises_size_sqm",
+                        "value": f"{val}m²",
+                        "confidence": 0.5,
+                        "reason": "Premises size extracted by fallback regex — manual verification recommended. Regex may have captured wrong m² reference in document."
+                    })
+                    report["data_quality"]["low_confidence_fields"] = low_conf
+                    
+                    if report["data_quality"].get("overall_confidence", 1.0) > 0.75:
+                        report["data_quality"]["overall_confidence"] = 0.75
+                    
+                    if "review_status" in report:
+                        report["review_status"]["requires_human_review"] = True
+                        existing_reason = report["review_status"].get("review_reason", "")
+                        report["review_status"]["review_reason"] = (
+                            existing_reason + " Premises size requires manual verification."
+                        ).strip()
+                        
                     break
         
         dq = report.get("data_quality", {})
