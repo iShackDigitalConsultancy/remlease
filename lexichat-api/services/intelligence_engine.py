@@ -314,11 +314,15 @@ Output ONLY the Intelligence Report JSON. It must match exactly this schema:
         )
         raw = resp.choices[0].message.content.strip()
         try:
-            return json.loads(raw)
+            report = json.loads(raw)
+            report = validate_intelligence_report(report, caches, full_text)
+            return report
         except json.JSONDecodeError:
             match = re.search(r'\{.*\}', raw, re.DOTALL)
             if match:
-                return json.loads(match.group())
+                report = json.loads(match.group())
+                report = validate_intelligence_report(report, caches, full_text)
+                return report
             return {
                 "error": "Failed to parse intelligence report",
                 "raw_response": raw[:500]
@@ -326,6 +330,117 @@ Output ONLY the Intelligence Report JSON. It must match exactly this schema:
     except Exception as e:
         print(f"Error in reduce phase: {e}")
         return {"error": str(e)}
+
+def validate_intelligence_report(
+    report: dict, 
+    caches: dict, 
+    full_text: str
+) -> dict:
+    """
+    Deterministic post-processing validator.
+    Runs after AI JSON parsing, before cache write.
+    The AI analyses. The validator polices.
+    """
+    
+    # FIX 1 — Remove invalid contradictions
+    if "data_quality" in report:
+        valid_contradictions = []
+        for c in report["data_quality"].get("contradictions", []):
+            val_a = c.get("document_a_value")
+            val_b = c.get("document_b_value")
+            null_values = {None, "null", "Not specified", "", "not specified", "N/A", "n/a"}
+            if val_a not in null_values and val_b not in null_values and val_a != val_b:
+                valid_contradictions.append(c)
+        report["data_quality"]["contradictions"] = valid_contradictions
+
+    # FIX 2 — Convert all "null" strings to None
+    def clean_nulls(obj):
+        if isinstance(obj, dict):
+            return {k: clean_nulls(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [clean_nulls(i) for i in obj]
+        elif obj in ("null", "Null", "NULL", "Not specified", "not specified"):
+            return None
+        return obj
+    
+    report = clean_nulls(report)
+
+    # FIX 3 — Rent vs deposit confusion
+    fm = report.get("financial_model", {})
+    lc = fm.get("lease_costs", {})
+    current_rent = lc.get("current_monthly_rent")
+    deposit_indicators = ["deposit", "security deposit", "key deposit", "Deposit"]
+    
+    if current_rent:
+        rent_str = str(current_rent).lower()
+        rent_evidence = []
+        for ev in lc.get("source_evidence", []):
+            ev_text = str(ev.get("text","")).lower()
+            if any(d in ev_text for d in deposit_indicators):
+                rent_evidence.append(ev)
+        
+        ft_cache = caches.get("fundamental_terms", {})
+        security_deposit = None
+        if isinstance(ft_cache, list) and ft_cache:
+            security_deposit = ft_cache[0].get("security_deposit")
+        elif isinstance(ft_cache, dict):
+            items = ft_cache.get("fundamental_terms", [])
+            if items and isinstance(items, list):
+                security_deposit = items[0].get("security_deposit")
+        
+        rent_clean = str(current_rent).replace(" ", "").replace(",", "")
+        deposit_clean = str(security_deposit or "").replace(" ", "").replace(",", "")
+        
+        if rent_evidence or (deposit_clean and deposit_clean in rent_clean):
+            report.setdefault("financial_model", {}).setdefault("lease_costs", {})["current_monthly_rent"] = None
+            assumptions = report.setdefault("financial_model", {}).setdefault("assumptions", [])
+            assumptions.append({
+                "assumption": "Monthly rent could not be confirmed — value may have been confused with security deposit. Manual verification required.",
+                "impact": "Current monthly rent shown as null pending verification.",
+                "confidence": 1.0
+            })
+            report["financial_model"]["assumptions"] = assumptions
+
+    # FIX 4 — Premises size sanity check
+    premises_sqm = lc.get("premises_size_sqm")
+    if premises_sqm is None:
+        import re
+        sqm_pattern = re.compile(r'(\d+\.?\d*)\s*m[²2]|(\d+\.?\d*)\s*square\s*met', re.IGNORECASE)
+        matches = sqm_pattern.findall(full_text)
+        if matches:
+            for match in matches:
+                val = match[0] or match[1]
+                if val and float(val) > 10:
+                    report.setdefault("financial_model", {}).setdefault("lease_costs", {})["premises_size_sqm"] = f"{val}m²"
+                    break
+        
+        dq = report.get("data_quality", {})
+        missing = dq.get("missing_critical_fields", [])
+        already_flagged = any("premises" in str(m.get("field","")).lower() for m in missing)
+        if not already_flagged:
+            missing.append({
+                "field": "premises_size_sqm",
+                "document": "Lease Agreement",
+                "searched_locations": ["main body", "schedule", "preamble", "annexures"],
+                "impact": "Cannot calculate total monthly rent from rate per m² without premises size"
+            })
+            report.setdefault("data_quality", {})["missing_critical_fields"] = missing
+
+    # FIX 5 — Renewal fee formula check
+    fc = fm.get("franchise_costs", {})
+    renewal_fee = fc.get("renewal_fee")
+    if renewal_fee is None:
+        import re
+        renewal_pattern = re.compile(r'renewal\s+fee|upfront\s+licen[sc]e\s+fee', re.IGNORECASE)
+        if renewal_pattern.search(full_text):
+            report.setdefault("data_quality", {}).setdefault("missing_critical_fields", []).append({
+                "field": "renewal_fee",
+                "document": "Franchise Agreement",
+                "searched_locations": ["main body", "Annexure A", "schedules", "definitions"],
+                "impact": "Renewal cost exposure cannot be calculated"
+            })
+
+    return report
 
 async def generate_intelligence_report(workspace_id: str, doc_ids: list, filenames: list, full_text: str, db, doc_map: dict = None) -> dict:
     """Generate the full Intelligence Report"""
