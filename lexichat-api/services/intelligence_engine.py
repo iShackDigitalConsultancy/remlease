@@ -36,6 +36,8 @@ async def run_intelligence_pipeline(workspace_id: str, doc_ids: list, filenames:
     
     # PASS 1: MAP
     map_instruction = """You are a senior legal analyst reviewing commercial lease and franchise agreements.
+PREMISES SIZE: Look specifically for m², square metres, or sqm values near the words PREMISES, SHOP, or AREA. These often appear in the schedule or preamble as '+/- 175.3m²' or similar format.
+
 Extract from this section:
 1. All clause references with exact text (quote under 20 words)
 2. All defined terms and definitions
@@ -77,9 +79,13 @@ STRICT ANTI-HALLUCINATION RULES:
 3. renewal_fee must be expressed as a formula if stated as a percentage or ratio, not as a calculated amount. Example: '100% of then-current upfront license fee (currently R120,000)'
 4. monthly_variable_estimate and exit_cost_estimate must be null unless explicitly calculable from extracted figures. Add assumption entries instead.
 5. total_occupancy_exposure fields must only contain values derivable from extracted numbers. If turnover is unknown, variable costs cannot be estimated — say so in assumptions.
+6. premises_size_sqm: Search specifically for numeric values followed by m², sqm, or 'square metres' near any PREMISES definition. Common formats: '175.3m²', '+/- 175m²', 'approximately 175 square metres'. If found, use the exact number. If genuinely not found after searching main body, schedule, preamble and annexures, add to missing_critical_fields.
+7. renewal_fee: If the renewal fee is stated as a percentage of another fee (e.g. '100% of the then current Upfront License Fee'), express it EXACTLY as that formula with the current fee amount in brackets. Example output: '100% of then-current Upfront License Fee (currently R120,000.00 per Annexure A item 1)'. Do NOT say Not specified if a formula is stated — the formula IS the specification.
+8. current_monthly_rent: This is the BASE RENT payable monthly. It must NOT be confused with the security deposit, key deposit, or any lump sum payment. The monthly rent is typically stated as 'R X per m² per month' multiplied by the premises size, OR as a fixed monthly amount in the rental schedule. The security deposit is a once-off amount held by the landlord — it is NOT rent.
 
 CONTRADICTIONS RULE:
 Only populate contradictions when you have direct evidence from BOTH documents showing different values for the same field. Both values must appear in source_evidence. NEVER fabricate a contradiction. If you cannot find both values in the source text, do not add a contradiction entry.
+A value of 'Not specified' or 'null' in one document does NOT constitute a contradiction with a value in another document. Contradictions only occur when BOTH documents explicitly state DIFFERENT values for the same field.
 
 SOURCE EVIDENCE RULE:
 The 'text' field in every source_evidence entry must be an EXACT verbatim quote from the document, under 25 words. Do NOT paraphrase or summarise. Do NOT write 'The landlord has approval rights over...' if the contract says 'The Lessee shall not cede, transfer, pledge or in any way dispose of...' Copy the actual words from the contract.
