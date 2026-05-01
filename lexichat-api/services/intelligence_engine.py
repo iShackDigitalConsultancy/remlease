@@ -315,13 +315,13 @@ Output ONLY the Intelligence Report JSON. It must match exactly this schema:
         raw = resp.choices[0].message.content.strip()
         try:
             report = json.loads(raw)
-            report = validate_intelligence_report(report, caches, full_text)
+            report = validate_intelligence_report(report, caches, full_text, filenames)
             return report
         except json.JSONDecodeError:
             match = re.search(r'\{.*\}', raw, re.DOTALL)
             if match:
                 report = json.loads(match.group())
-                report = validate_intelligence_report(report, caches, full_text)
+                report = validate_intelligence_report(report, caches, full_text, filenames)
                 return report
             return {
                 "error": "Failed to parse intelligence report",
@@ -334,7 +334,8 @@ Output ONLY the Intelligence Report JSON. It must match exactly this schema:
 def validate_intelligence_report(
     report: dict, 
     caches: dict, 
-    full_text: str
+    full_text: str,
+    filenames: list = None
 ) -> dict:
     """
     Deterministic post-processing validator.
@@ -412,6 +413,27 @@ def validate_intelligence_report(
                 val = match[0] or match[1]
                 if val and float(val) > 10:
                     report.setdefault("financial_model", {}).setdefault("lease_costs", {})["premises_size_sqm"] = f"{val}m²"
+                    
+                    # Find context around the match for source evidence
+                    match_pos = full_text.lower().find(val.lower())
+                    if match_pos >= 0:
+                        start = max(0, match_pos - 50)
+                        end = min(len(full_text), match_pos + 50)
+                        context = full_text[start:end].strip()
+                        context = " ".join(context.split())[:100]
+                    else:
+                        context = f"{val}m² (regex match)"
+                    
+                    # Add source evidence for regex-derived value
+                    existing_evidence = report.get("financial_model", {}).get("lease_costs", {}).get("source_evidence", [])
+                    existing_evidence.append({
+                        "document": next((f for f in (filenames or []) if "lease" in f.lower()), filenames[0] if filenames else "Lease"),
+                        "clause": "regex_fallback",
+                        "text": context,
+                        "page": None,
+                        "confidence": 0.5
+                    })
+                    report["financial_model"]["lease_costs"]["source_evidence"] = existing_evidence
                     
                     dq = report.setdefault("data_quality", {})
                     low_conf = dq.get("low_confidence_fields", [])
