@@ -149,6 +149,7 @@ function InnerApp() {
   const [isGeneratingIntelligence, setIsGeneratingIntelligence] = useState(false);
   const [intelligenceReport, setIntelligenceReport] = useState(null);
   const [showIntelligenceModal, setShowIntelligenceModal] = useState(false);
+  const [activeIntelligenceTab, setActiveIntelligenceTab] = useState('overview');
 
   const executeIntelligenceReport = async (forceRefresh = false) => {
     if (!activeCase || library.length === 0) return;
@@ -2128,263 +2129,256 @@ END:VCALENDAR`;
             </div>
 
             {/* Tabs */}
-            {(() => {
-              const [activeTab, setActiveTab] = React.useState('overview');
-              const ir = intelligenceReport;
-              
-              return (
-                <>
-                  <div className="flex border-b border-slate-200 px-6">
-                    {['overview','financial','dependencies','data-quality'].map(tab => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`px-4 py-3 text-xs font-bold border-b-2 transition-colors ${activeTab === tab ? 'border-purple-600 text-purple-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                      >
-                        {tab === 'overview' ? 'Overview' : tab === 'financial' ? 'Financial Model' : tab === 'dependencies' ? 'Dependencies & Control' : 'Data Quality'}
-                      </button>
-                    ))}
+            <>
+              <div className="flex border-b border-slate-200 px-6">
+                {['overview','financial','dependencies','data-quality'].map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveIntelligenceTab(tab)}
+                    className={`px-4 py-3 text-xs font-bold border-b-2 transition-colors ${activeIntelligenceTab === tab ? 'border-purple-600 text-purple-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                  >
+                    {tab === 'overview' ? 'Overview' : tab === 'financial' ? 'Financial Model' : tab === 'dependencies' ? 'Dependencies & Control' : 'Data Quality'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {/* OVERVIEW TAB */}
+                {activeIntelligenceTab === 'overview' && (
+                  <div className="space-y-4">
+                    {/* Risk Summary */}
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
+                      Risk Summary
+                    </h3>
+                    <div className="space-y-2">
+                      {(intelligenceReport.risk_summary || []).map((risk, idx) => (
+                        <div key={idx} className={`p-3 rounded-xl border ${risk.severity === 'Critical' ? 'bg-red-50 border-red-200' : risk.severity === 'High' ? 'bg-orange-50 border-orange-200' : risk.severity === 'Medium' ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-bold text-slate-800">
+                              {risk.title}
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${risk.severity === 'Critical' ? 'bg-red-200 text-red-800' : risk.severity === 'High' ? 'bg-orange-200 text-orange-800' : 'bg-amber-200 text-amber-800'}`}>
+                              {risk.severity}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600">
+                            {risk.description}
+                          </p>
+                          {risk.recommendation && (
+                            <p className="text-xs text-slate-500 mt-1 italic">
+                              → {risk.recommendation}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Action Items */}
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide mt-4">
+                      Action Items
+                    </h3>
+                    <div className="space-y-2">
+                      {(intelligenceReport.action_items || []).map((item, idx) => (
+                        <div key={idx} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${item.priority === 'Critical' ? 'bg-red-200 text-red-800' : item.priority === 'High' ? 'bg-orange-200 text-orange-800' : 'bg-blue-100 text-blue-700'}`}>
+                            {item.priority}
+                          </span>
+                          <div className="flex-1">
+                            <p className="text-xs font-semibold text-slate-800">
+                              {item.action}
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              Owner: {item.owner}
+                              {item.due_date && ` · Due: ${item.due_date}`}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                )}
 
-                  <div className="flex-1 overflow-y-auto p-6">
-                    {/* OVERVIEW TAB */}
-                    {activeTab === 'overview' && (
-                      <div className="space-y-4">
-                        {/* Risk Summary */}
-                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
-                          Risk Summary
-                        </h3>
-                        <div className="space-y-2">
-                          {(ir.risk_summary || []).map((risk, idx) => (
-                            <div key={idx} className={`p-3 rounded-xl border ${risk.severity === 'Critical' ? 'bg-red-50 border-red-200' : risk.severity === 'High' ? 'bg-orange-50 border-orange-200' : risk.severity === 'Medium' ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-bold text-slate-800">
-                                  {risk.title}
-                                </span>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${risk.severity === 'Critical' ? 'bg-red-200 text-red-800' : risk.severity === 'High' ? 'bg-orange-200 text-orange-800' : 'bg-amber-200 text-amber-800'}`}>
-                                  {risk.severity}
-                                </span>
-                              </div>
-                              <p className="text-xs text-slate-600">
-                                {risk.description}
-                              </p>
-                              {risk.recommendation && (
-                                <p className="text-xs text-slate-500 mt-1 italic">
-                                  → {risk.recommendation}
-                                </p>
-                              )}
-                            </div>
-                          ))}
+                {/* FINANCIAL TAB */}
+                {activeIntelligenceTab === 'financial' && (
+                  <div className="space-y-4">
+                    {/* Lease Costs */}
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
+                      Lease Costs
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        ['Base Rent/m²', intelligenceReport.financial_model?.lease_costs?.base_rent_per_sqm],
+                        ['Premises Size', intelligenceReport.financial_model?.lease_costs?.premises_size_sqm],
+                        ['Monthly Rent', intelligenceReport.financial_model?.lease_costs?.current_monthly_rent],
+                        ['Escalation', intelligenceReport.financial_model?.lease_costs?.escalation_rate],
+                      ].map(([label, val]) => (
+                        <div key={label} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <p className="text-[10px] text-slate-500 uppercase font-bold">
+                            {label}
+                          </p>
+                          <p className="text-sm font-semibold text-slate-800 mt-1">
+                            {val || <span className="text-slate-400 italic text-xs">Not verified</span>}
+                          </p>
                         </div>
+                      ))}
+                    </div>
 
-                        {/* Action Items */}
-                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide mt-4">
-                          Action Items
-                        </h3>
-                        <div className="space-y-2">
-                          {(ir.action_items || []).map((item, idx) => (
-                            <div key={idx} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${item.priority === 'Critical' ? 'bg-red-200 text-red-800' : item.priority === 'High' ? 'bg-orange-200 text-orange-800' : 'bg-blue-100 text-blue-700'}`}>
-                                {item.priority}
-                              </span>
-                              <div className="flex-1">
-                                <p className="text-xs font-semibold text-slate-800">
-                                  {item.action}
-                                </p>
-                                <p className="text-[10px] text-slate-500 mt-0.5">
-                                  Owner: {item.owner}
-                                  {item.due_date && ` · Due: ${item.due_date}`}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* FINANCIAL TAB */}
-                    {activeTab === 'financial' && (
-                      <div className="space-y-4">
-                        {/* Lease Costs */}
-                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
-                          Lease Costs
-                        </h3>
-                        <div className="grid grid-cols-2 gap-3">
-                          {[
-                            ['Base Rent/m²', ir.financial_model?.lease_costs?.base_rent_per_sqm],
-                            ['Premises Size', ir.financial_model?.lease_costs?.premises_size_sqm],
-                            ['Monthly Rent', ir.financial_model?.lease_costs?.current_monthly_rent],
-                            ['Escalation', ir.financial_model?.lease_costs?.escalation_rate],
-                          ].map(([label, val]) => (
-                            <div key={label} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                              <p className="text-[10px] text-slate-500 uppercase font-bold">
-                                {label}
-                              </p>
-                              <p className="text-sm font-semibold text-slate-800 mt-1">
-                                {val || <span className="text-slate-400 italic text-xs">Not verified</span>}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* possible_values amber boxes */}
-                        {ir.possible_values && Object.keys(ir.possible_values).length > 0 && (
-                          <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-xl">
-                            <p className="text-xs font-bold text-amber-700 mb-2">
-                              ⚠ Unverified Candidate Values
+                    {/* possible_values amber boxes */}
+                    {intelligenceReport.possible_values && Object.keys(intelligenceReport.possible_values).length > 0 && (
+                      <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-xl">
+                        <p className="text-xs font-bold text-amber-700 mb-2">
+                          ⚠ Unverified Candidate Values
+                        </p>
+                        {Object.entries(intelligenceReport.possible_values).map(([field, candidates]) => (
+                          <div key={field} className="mb-2">
+                            <p className="text-[10px] font-bold text-amber-600 uppercase">
+                              {field.replace(/_/g, ' ')}
                             </p>
-                            {Object.entries(ir.possible_values).map(([field, candidates]) => (
-                              <div key={field} className="mb-2">
-                                <p className="text-[10px] font-bold text-amber-600 uppercase">
-                                  {field.replace(/_/g, ' ')}
-                                </p>
-                                {(candidates || []).map((c, i) => (
-                                  <p key={i} className="text-xs text-amber-800">
-                                    {c.value} — {c.reason}
-                                  </p>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Franchise Costs */}
-                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide mt-4">
-                          Franchise Costs
-                        </h3>
-                        <div className="grid grid-cols-2 gap-3">
-                          {[
-                            ['Upfront Fee', ir.financial_model?.franchise_costs?.upfront_license_fee],
-                            ['Monthly Fee %', ir.financial_model?.franchise_costs?.monthly_franchise_fee_pct],
-                            ['Marketing Fee %', ir.financial_model?.franchise_costs?.marketing_fee_pct],
-                            ['Renewal Fee', ir.financial_model?.franchise_costs?.renewal_fee],
-                          ].map(([label, val]) => (
-                            <div key={label} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                              <p className="text-[10px] text-slate-500 uppercase font-bold">
-                                {label}
-                              </p>
-                              <p className="text-sm font-semibold text-slate-800 mt-1">
-                                {val || <span className="text-slate-400 italic text-xs">Not verified</span>}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Assumptions */}
-                        {(ir.financial_model?.assumptions || []).length > 0 && (
-                          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                            <p className="text-xs font-bold text-blue-700 mb-2">
-                              Assumptions
-                            </p>
-                            {(ir.financial_model.assumptions).map((a, i) => (
-                              <p key={i} className="text-xs text-blue-800 mb-1">
-                                • {a.assumption}
+                            {(candidates || []).map((c, i) => (
+                              <p key={i} className="text-xs text-amber-800">
+                                {c.value} — {c.reason}
                               </p>
                             ))}
                           </div>
-                        )}
+                        ))}
                       </div>
                     )}
 
-                    {/* DEPENDENCIES TAB */}
-                    {activeTab === 'dependencies' && (
-                      <div className="space-y-4">
-                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
-                          Dependency Map
-                        </h3>
-                        <div className="grid grid-cols-2 gap-3">
-                          {[
-                            ['Lease depends on Franchise', ir.dependency_map?.lease_depends_on_franchise],
-                            ['Franchise depends on Lease', ir.dependency_map?.franchise_depends_on_lease],
-                            ['Franchisor controls Lease Assignment', ir.dependency_map?.franchisor_controls_lease_assignment],
-                            ['Term Mismatch', ir.dependency_map?.term_mismatch_flag],
-                          ].map(([label, val]) => (
-                            <div key={label} className={`p-3 rounded-xl border ${val === true ? 'bg-amber-50 border-amber-300' : 'bg-green-50 border-green-200'}`}>
-                              <p className="text-[10px] text-slate-500 uppercase font-bold">
-                                {label}
-                              </p>
-                              <p className={`text-sm font-bold mt-1 ${val === true ? 'text-amber-700' : 'text-green-700'}`}>
-                                {val === true ? 'YES ⚠' : val === false ? 'NO ✓' : '—'}
-                              </p>
-                            </div>
-                          ))}
+                    {/* Franchise Costs */}
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide mt-4">
+                      Franchise Costs
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        ['Upfront Fee', intelligenceReport.financial_model?.franchise_costs?.upfront_license_fee],
+                        ['Monthly Fee %', intelligenceReport.financial_model?.franchise_costs?.monthly_franchise_fee_pct],
+                        ['Marketing Fee %', intelligenceReport.financial_model?.franchise_costs?.marketing_fee_pct],
+                        ['Renewal Fee', intelligenceReport.financial_model?.franchise_costs?.renewal_fee],
+                      ].map(([label, val]) => (
+                        <div key={label} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <p className="text-[10px] text-slate-500 uppercase font-bold">
+                            {label}
+                          </p>
+                          <p className="text-sm font-semibold text-slate-800 mt-1">
+                            {val || <span className="text-slate-400 italic text-xs">Not verified</span>}
+                          </p>
                         </div>
+                      ))}
+                    </div>
 
-                        {ir.dependency_map?.term_mismatch_flag && (
-                          <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl">
-                            <p className="text-xs font-bold text-amber-700">
-                              ⚠ Term Mismatch Detected
-                            </p>
-                            <p className="text-xs text-amber-800 mt-1">
-                              {ir.dependency_map.dependency_notes}
-                            </p>
-                          </div>
-                        )}
-
-                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide mt-4">
-                          Control Analysis
-                        </h3>
-                        <div className="space-y-3">
-                          {[
-                            ['Lease Control', ir.control_analysis?.lease_control],
-                            ['Brand Control', ir.control_analysis?.brand_control],
-                          ].map(([label, ctrl]) => 
-                            ctrl && (
-                            <div key={label} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                              <p className="text-[10px] font-bold text-slate-500 uppercase">{label}</p>
-                              <p className="text-sm font-semibold text-slate-800">
-                                {ctrl.party}
-                              </p>
-                              <p className="text-xs text-slate-600 mt-1">
-                                {(ctrl.approval_rights || []).join(' · ')}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
+                    {/* Assumptions */}
+                    {(intelligenceReport.financial_model?.assumptions || []).length > 0 && (
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                        <p className="text-xs font-bold text-blue-700 mb-2">
+                          Assumptions
+                        </p>
+                        {(intelligenceReport.financial_model.assumptions).map((a, i) => (
+                          <p key={i} className="text-xs text-blue-800 mb-1">
+                            • {a.assumption}
+                          </p>
+                        ))}
                       </div>
                     )}
-
-                    {/* DATA QUALITY TAB */}
-                    {activeTab === 'data-quality' && (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase">
-                              Overall Confidence
-                            </p>
-                            <p className={`text-2xl font-bold ${(ir.data_quality?.overall_confidence || 0) >= 0.8 ? 'text-green-600' : (ir.data_quality?.overall_confidence || 0) >= 0.65 ? 'text-amber-600' : 'text-red-600'}`}>
-                              {Math.round((ir.data_quality?.overall_confidence || 0) * 100)}%
-                            </p>
-                          </div>
-                        </div>
-
-                        {(ir.data_quality?.missing_critical_fields || []).length > 0 && (
-                          <div>
-                            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
-                              Missing Critical Fields
-                            </h3>
-                            {ir.data_quality.missing_critical_fields.map((f, i) => (
-                              <div key={i} className="p-3 mt-2 bg-red-50 border border-red-200 rounded-xl">
-                                <p className="text-xs font-bold text-red-700">
-                                  {f.field}
-                                </p>
-                                <p className="text-xs text-red-600 mt-1">
-                                  {f.impact}
-                                </p>
-                                <p className="text-[10px] text-red-500 mt-1">
-                                  Searched: {(f.searched_locations || []).join(', ')}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
                   </div>
-                </>
-              );
-            })()}
+                )}
+
+                {/* DEPENDENCIES TAB */}
+                {activeIntelligenceTab === 'dependencies' && (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
+                      Dependency Map
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        ['Lease depends on Franchise', intelligenceReport.dependency_map?.lease_depends_on_franchise],
+                        ['Franchise depends on Lease', intelligenceReport.dependency_map?.franchise_depends_on_lease],
+                        ['Franchisor controls Lease Assignment', intelligenceReport.dependency_map?.franchisor_controls_lease_assignment],
+                        ['Term Mismatch', intelligenceReport.dependency_map?.term_mismatch_flag],
+                      ].map(([label, val]) => (
+                        <div key={label} className={`p-3 rounded-xl border ${val === true ? 'bg-amber-50 border-amber-300' : 'bg-green-50 border-green-200'}`}>
+                          <p className="text-[10px] text-slate-500 uppercase font-bold">
+                            {label}
+                          </p>
+                          <p className={`text-sm font-bold mt-1 ${val === true ? 'text-amber-700' : 'text-green-700'}`}>
+                            {val === true ? 'YES ⚠' : val === false ? 'NO ✓' : '—'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {intelligenceReport.dependency_map?.term_mismatch_flag && (
+                      <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl">
+                        <p className="text-xs font-bold text-amber-700">
+                          ⚠ Term Mismatch Detected
+                        </p>
+                        <p className="text-xs text-amber-800 mt-1">
+                          {intelligenceReport.dependency_map.dependency_notes}
+                        </p>
+                      </div>
+                    )}
+
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide mt-4">
+                      Control Analysis
+                    </h3>
+                    <div className="space-y-3">
+                      {[
+                        ['Lease Control', intelligenceReport.control_analysis?.lease_control],
+                        ['Brand Control', intelligenceReport.control_analysis?.brand_control],
+                      ].map(([label, ctrl]) => 
+                        ctrl && (
+                        <div key={label} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase">{label}</p>
+                          <p className="text-sm font-semibold text-slate-800">
+                            {ctrl.party}
+                          </p>
+                          <p className="text-xs text-slate-600 mt-1">
+                            {(ctrl.approval_rights || []).join(' · ')}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* DATA QUALITY TAB */}
+                {activeIntelligenceTab === 'data-quality' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">
+                          Overall Confidence
+                        </p>
+                        <p className={`text-2xl font-bold ${(intelligenceReport.data_quality?.overall_confidence || 0) >= 0.8 ? 'text-green-600' : (intelligenceReport.data_quality?.overall_confidence || 0) >= 0.65 ? 'text-amber-600' : 'text-red-600'}`}>
+                          {Math.round((intelligenceReport.data_quality?.overall_confidence || 0) * 100)}%
+                        </p>
+                      </div>
+                    </div>
+
+                    {(intelligenceReport.data_quality?.missing_critical_fields || []).length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
+                          Missing Critical Fields
+                        </h3>
+                        {intelligenceReport.data_quality.missing_critical_fields.map((f, i) => (
+                          <div key={i} className="p-3 mt-2 bg-red-50 border border-red-200 rounded-xl">
+                            <p className="text-xs font-bold text-red-700">
+                              {f.field}
+                            </p>
+                            <p className="text-xs text-red-600 mt-1">
+                              {f.impact}
+                            </p>
+                            <p className="text-[10px] text-red-500 mt-1">
+                              Searched: {(f.searched_locations || []).join(', ')}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+            </>
           </div>
         </div>
       )}
