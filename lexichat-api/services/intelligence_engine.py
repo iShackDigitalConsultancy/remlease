@@ -331,6 +331,195 @@ Output ONLY the Intelligence Report JSON. It must match exactly this schema:
         print(f"Error in reduce phase: {e}")
         return {"error": str(e)}
 
+def verify_value_in_text(
+    value: str, 
+    full_text: str
+) -> bool:
+    """
+    Ground truth anchor.
+    Confirms an extracted value actually 
+    exists in the source document text.
+    Normalises whitespace and case before 
+    matching.
+    """
+    if not value or not full_text:
+        return False
+    # Strip currency symbols and normalize
+    normalized_value = (
+        str(value)
+        .replace(" ", "")
+        .replace(",", "")
+        .replace("R", "")
+        .replace("m²", "")
+        .replace("sqm", "")
+        .lower()
+        .strip()
+    )
+    normalized_text = (
+        full_text
+        .replace(" ", "")
+        .replace(",", "")
+        .lower()
+    )
+    # Must be at least 3 chars to match
+    if len(normalized_value) < 3:
+        return False
+    return normalized_value in normalized_text
+
+def verify_critical_fields(
+    report: dict,
+    full_text: str,
+    filenames: list = None
+) -> dict:
+    """
+    Phase 5: Text verification layer.
+    Checks AI-extracted values against 
+    raw document text.
+    If value cannot be confirmed in text:
+    - downgrade confidence
+    - move to possible_values
+    - flag for human review
+    This prevents silent false positives.
+    """
+    fm = report.get("financial_model", {})
+    lc = fm.get("lease_costs", {})
+    fc = fm.get("franchise_costs", {})
+    
+    fields_to_verify = [
+        {
+            "section": "lease_costs",
+            "field": "premises_size_sqm",
+            "value": lc.get("premises_size_sqm"),
+            "extract": lambda v: 
+                v.replace("m²","").replace(
+                    "sqm","").strip()
+                if v else None
+        },
+        {
+            "section": "lease_costs", 
+            "field": "base_rent_per_sqm",
+            "value": lc.get("base_rent_per_sqm"),
+            "extract": lambda v: 
+                str(v).replace("R","").replace(
+                    " ","").split("/")[0].strip()
+                if v else None
+        },
+        {
+            "section": "lease_costs",
+            "field": "escalation_rate",
+            "value": lc.get("escalation_rate"),
+            "extract": lambda v: 
+                str(v).replace("%","").strip()
+                if v else None
+        },
+        {
+            "section": "franchise_costs",
+            "field": "upfront_license_fee",
+            "value": fc.get("upfront_license_fee"),
+            "extract": lambda v:
+                str(v).replace("R","").replace(
+                    " ","").replace(",","").strip()
+                if v else None
+        },
+        {
+            "section": "franchise_costs",
+            "field": "monthly_franchise_fee_pct",
+            "value": fc.get(
+                "monthly_franchise_fee_pct"),
+            "extract": lambda v:
+                str(v).replace("%","").split(
+                    " ")[0].strip()
+                if v else None
+        }
+    ]
+    
+    for field_def in fields_to_verify:
+        value = field_def["value"]
+        if value is None:
+            continue
+            
+        try:
+            search_value = field_def[
+                "extract"](str(value))
+        except Exception:
+            search_value = str(value)
+        
+        if not verify_value_in_text(
+            search_value, full_text):
+            # Value not found in document text
+            # Move to possible_values
+            section = field_def["section"]
+            field = field_def["field"]
+            
+            possible_values = report.get(
+                "possible_values", {})
+            candidates = possible_values.get(
+                field, [])
+            candidates.append({
+                "value": value,
+                "confidence": 0.4,
+                "reason": 
+                    f"AI extracted '{value}' "
+                    f"but value could not be "
+                    f"confirmed in raw document "
+                    f"text. Silent false positive "
+                    f"risk. Manual verification "
+                    f"required.",
+                "source_evidence": {
+                    "clause": 
+                        "extraction_verification"
+                        "_failed",
+                    "text": None,
+                    "page": None
+                }
+            })
+            possible_values[field] = candidates
+            report["possible_values"] = \
+                possible_values
+            
+            # Null out the core field
+            report["financial_model"][
+                section][field] = None
+            
+            # Add to low_confidence_fields
+            dq = report.setdefault(
+                "data_quality", {})
+            low_conf = dq.get(
+                "low_confidence_fields", [])
+            low_conf.append({
+                "field": field,
+                "value": value,
+                "confidence": 0.4,
+                "reason": 
+                    "Value not verifiable in "
+                    "raw document text — "
+                    "possible AI hallucination"
+            })
+            dq["low_confidence_fields"] = \
+                low_conf
+            
+            # Downgrade overall confidence
+            current = dq.get(
+                "overall_confidence", 1.0)
+            if current > 0.65:
+                dq["overall_confidence"] = 0.65
+            
+            # Flag for human review
+            if "review_status" in report:
+                report["review_status"][
+                    "requires_human_review"] = True
+                existing = report[
+                    "review_status"].get(
+                    "review_reason", "")
+                report["review_status"][
+                    "review_reason"] = (
+                    existing + 
+                    f" {field} could not be "
+                    f"verified in document text."
+                ).strip()
+    
+    return report
+
 def validate_intelligence_report(
     report: dict, 
     caches: dict, 
@@ -475,6 +664,9 @@ def validate_intelligence_report(
                 "searched_locations": ["main body", "Annexure A", "schedules", "definitions"],
                 "impact": "Renewal cost exposure cannot be calculated"
             })
+
+    report = verify_critical_fields(
+        report, full_text, filenames)
 
     return report
 
