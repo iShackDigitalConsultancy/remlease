@@ -332,39 +332,48 @@ Output ONLY the Intelligence Report JSON. It must match exactly this schema:
         return {"error": str(e)}
 
 def verify_value_in_text(
-    value: str, 
-    full_text: str
+    value: str,
+    full_text: str,
+    alternatives: list = None
 ) -> bool:
-    """
-    Ground truth anchor.
-    Confirms an extracted value actually 
-    exists in the source document text.
-    Normalises whitespace and case before 
-    matching.
-    """
     if not value or not full_text:
         return False
-    # Strip currency symbols and normalize
-    normalized_value = (
-        str(value)
-        .replace(" ", "")
-        .replace(",", "")
-        .replace("R", "")
-        .replace("m²", "")
-        .replace("sqm", "")
-        .lower()
-        .strip()
-    )
-    normalized_text = (
-        full_text
-        .replace(" ", "")
-        .replace(",", "")
-        .lower()
-    )
-    # Must be at least 3 chars to match
-    if len(normalized_value) < 3:
-        return False
-    return normalized_value in normalized_text
+    
+    def normalize(v):
+        return (
+            str(v)
+            .replace(",", "")
+            .lower()
+            .strip()
+        )
+    
+    normalized_text = normalize(full_text)
+    normalized_text_nospace = (
+        normalized_text.replace(" ", ""))
+    
+    # Check primary value with and 
+    # without spaces
+    norm_val = normalize(value)
+    if norm_val in normalized_text:
+        return True
+    if (norm_val.replace(" ", "") 
+        in normalized_text_nospace):
+        return True
+    
+    # Check alternatives — safe only
+    if alternatives:
+        for alt in alternatives:
+            norm_alt = normalize(alt)
+            if len(norm_alt) < 3:
+                continue  # Never match
+                          # short strings
+            if norm_alt in normalized_text:
+                return True
+            if (norm_alt.replace(" ", "")
+                in normalized_text_nospace):
+                return True
+    
+    return False
 
 def verify_critical_fields(
     report: dict,
@@ -408,11 +417,13 @@ def verify_critical_fields(
             "section": "lease_costs",
             "field": "escalation_rate",
             "value": lc.get("escalation_rate"),
-            "extract": lambda v:
-                (str(v).split("%")[0].strip() + "%")
-                if v and "%" in str(v) 
-                else str(v).strip()
-                if v else None
+            "extract": lambda v: 
+                str(v) if v else None,
+            "alternatives": lambda v: [
+                str(v).split("%")[0].strip() + "%",
+                str(v).split("%")[0].strip() + " %",
+                str(v).replace("per annum", "pa")
+            ] if v and "%" in str(v) else []
         },
         {
             "section": "franchise_costs",
@@ -429,11 +440,22 @@ def verify_critical_fields(
             "value": fc.get(
                 "monthly_franchise_fee_pct"),
             "extract": lambda v:
-                (str(v).split("%")[0].split(
-                    " ")[0].strip() + "%")
-                if v and "%" in str(v)
-                else str(v).strip()
-                if v else None
+                str(v) if v else None,
+            "alternatives": lambda v: [
+                str(v).split("%")[0].strip() + "%",
+                str(v).split("%")[0].strip() + " %"
+            ] if v and "%" in str(v) else []
+        },
+        {
+            "section": "franchise_costs",
+            "field": "marketing_fee_pct",
+            "value": fc.get("marketing_fee_pct"),
+            "extract": lambda v:
+                str(v) if v else None,
+            "alternatives": lambda v: [
+                str(v).split("%")[0].strip() + "%",
+                str(v).split("%")[0].strip() + " %"
+            ] if v and "%" in str(v) else []
         }
     ]
     
@@ -448,8 +470,16 @@ def verify_critical_fields(
         except Exception:
             search_value = str(value)
         
+        alternatives = []
+        if "alternatives" in field_def:
+            try:
+                alternatives = field_def[
+                    "alternatives"](str(value))
+            except Exception:
+                alternatives = []
+        
         if not verify_value_in_text(
-            search_value, full_text):
+            search_value, full_text, alternatives):
             # Value not found in document text
             # Move to possible_values
             section = field_def["section"]
