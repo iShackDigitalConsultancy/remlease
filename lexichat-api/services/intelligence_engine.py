@@ -408,8 +408,10 @@ def verify_critical_fields(
             "section": "lease_costs",
             "field": "escalation_rate",
             "value": lc.get("escalation_rate"),
-            "extract": lambda v: 
-                str(v).replace("%","").strip()
+            "extract": lambda v:
+                (str(v).split("%")[0].strip() + "%")
+                if v and "%" in str(v) 
+                else str(v).strip()
                 if v else None
         },
         {
@@ -427,8 +429,10 @@ def verify_critical_fields(
             "value": fc.get(
                 "monthly_franchise_fee_pct"),
             "extract": lambda v:
-                str(v).replace("%","").split(
-                    " ")[0].strip()
+                (str(v).split("%")[0].split(
+                    " ")[0].strip() + "%")
+                if v and "%" in str(v)
+                else str(v).strip()
                 if v else None
         }
     ]
