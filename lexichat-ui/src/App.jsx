@@ -1470,7 +1470,19 @@ END:VCALENDAR`;
                          <div key={wsIdx} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                              <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                  <div>
-                                     <h2 className="text-lg font-black text-slate-800">{ws.workspace_name}</h2>
+                                    <div className="flex items-center gap-3">
+                                        <h2 className="text-lg font-black text-slate-800">{ws.workspace_name}</h2>
+                                        {ws.renewal_mismatch?.has_mismatch && (
+                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ws.renewal_mismatch.severity === 'Critical' ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-orange-100 text-orange-700 border border-orange-300'}`}>
+                                            ⚠ {ws.renewal_mismatch.mismatch_type === 'franchise_renewal_unprotected' ? 'Franchise unprotected' : ws.renewal_mismatch.mismatch_type === 'no_renewal' ? 'No renewal rights' : 'Renewal mismatch'}
+                                          </span>
+                                        )}
+                                        {ws.earliest_deadline && (
+                                          <span className="text-[10px] text-slate-500 ml-2">
+                                            Next deadline: {ws.earliest_deadline}
+                                          </span>
+                                        )}
+                                    </div>
                                      {ws.property_location && (
                                          <p className="text-sm font-medium text-slate-500 flex items-center gap-1 mt-1">
                                              <MapPin size={14} className="text-slate-400" />

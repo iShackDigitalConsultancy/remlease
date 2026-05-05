@@ -709,6 +709,105 @@ Return ONLY valid JSON."""
     cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_gap_analysis.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
+def detect_renewal_mismatch(
+    expiries: list
+) -> dict:
+    """
+    Detects renewal mismatches between
+    lease and franchise agreements at 
+    the same site.
+    Returns mismatch summary dict.
+    """
+    null_values = {
+        None, "null", "None", "",
+        "None — no renewal option",
+        "not specified", "Not specified",
+        "N/A", "n/a"
+    }
+    
+    lease_docs = [
+        e for e in expiries
+        if e.get("doc_type") == 
+        "Lease Agreement"
+    ]
+    franchise_docs = [
+        e for e in expiries
+        if e.get("doc_type") == 
+        "Franchise Agreement"
+    ]
+    
+    result = {
+        "has_mismatch": False,
+        "mismatch_type": None,
+        "severity": None,
+        "description": None,
+        "lease_can_renew": None,
+        "franchise_can_renew": None
+    }
+    
+    if not lease_docs or not franchise_docs:
+        return result
+    
+    lease = lease_docs[0]
+    franchise = franchise_docs[0]
+    
+    lease_renewal = lease.get(
+        "renewal_option_period")
+    franchise_renewal = franchise.get(
+        "renewal_option_period")
+    
+    lease_can_renew = (
+        lease_renewal not in null_values
+    )
+    franchise_can_renew = (
+        franchise_renewal not in null_values
+    )
+    
+    result["lease_can_renew"] = lease_can_renew
+    result["franchise_can_renew"] = \
+        franchise_can_renew
+    
+    if franchise_can_renew and \
+       not lease_can_renew:
+        result.update({
+            "has_mismatch": True,
+            "mismatch_type": 
+                "franchise_renewal_unprotected",
+            "severity": "Critical",
+            "description": 
+                "Franchise has renewal option "
+                "but lease has no renewal right. "
+                "Franchisee cannot exercise "
+                "franchise renewal without "
+                "securing a new lease."
+        })
+    elif lease_can_renew and \
+         not franchise_can_renew:
+        result.update({
+            "has_mismatch": True,
+            "mismatch_type":
+                "lease_renewal_unprotected",
+            "severity": "High", 
+            "description":
+                "Lease has renewal option but "
+                "franchise has no renewal right. "
+                "Location can continue but "
+                "franchise brand cannot."
+        })
+    elif not lease_can_renew and \
+         not franchise_can_renew:
+        result.update({
+            "has_mismatch": False,
+            "mismatch_type": "no_renewal",
+            "severity": "High",
+            "description":
+                "Neither lease nor franchise "
+                "has a renewal option. "
+                "Both expire without right "
+                "to renew."
+        })
+    
+    return result
 
 async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
     from datetime import datetime
@@ -778,6 +877,17 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                         "renewal_option_period": exp.get("renewal_option_period"),
                         "action_required": exp.get("action_required")
                     })
+                
+                mismatch = detect_renewal_mismatch(ws_summary["documents"])
+                ws_summary["renewal_mismatch"] = mismatch
+                ws_summary["earliest_deadline"] = min(
+                    (e.get("renewal_deadline") 
+                     for e in ws_summary["documents"] 
+                     if e.get("renewal_deadline") 
+                     and e.get("renewal_deadline") 
+                     not in ["null", None, ""]),
+                    default=None
+                )
             except Exception as e:
                 print(f"Error reading cache for workspace {ws.id}: {e}")
                 
