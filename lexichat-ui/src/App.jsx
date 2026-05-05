@@ -1643,20 +1643,7 @@ END:VCALENDAR`;
             </motion.div>
           )}
           
-          {/* Quick Prompts */}
-          {messages.length === 1 && !isTyping && !isReceiving && library.length > 0 && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="flex gap-2 flex-wrap mt-2 max-w-3xl ml-12">
-              {["Summarize the main argument", "List all dates and deadlines mentioned", "Find any contradictions"].map((prompt, i) => (
-                <button 
-                  key={i} 
-                  onClick={(e) => { setInput(prompt); setTimeout(() => handleSend(e), 50); }} 
-                  className="text-xs font-semibold bg-white text-brand-blue px-4 py-2 rounded-full border border-slate-200 shadow-sm hover:border-brand-blue hover:shadow-md transition-all"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </motion.div>
-          )}
+
           
           <div ref={chatEndRef} className="h-4 shrink-0" />
         </div>
