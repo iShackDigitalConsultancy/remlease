@@ -418,6 +418,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
 
     example_expiries = ",\n    ".join([
     '{\n      "document": "' + fname + '",\n'
+    '      "doc_type": "Lease Agreement or Franchise Agreement",\n'
     '      "commencement_date": "YYYY-MM-DD",\n'
     '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
     '      "expiry_date": "YYYY-MM-DD",\n'
@@ -432,6 +433,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     for fname in filenames
 ]) if filenames else (
     '{\n      "document": "contract.pdf",\n'
+    '      "doc_type": "Lease Agreement or Franchise Agreement",\n'
     '      "commencement_date": "YYYY-MM-DD",\n'
     '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
     '      "expiry_date": "YYYY-MM-DD",\n'
@@ -448,6 +450,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     map_task = "Extract all dates, deadlines, and timeframes from this section. You MUST extract ALL of these specific fields if present:\n1. Commencement Date — when the lease/agreement starts\n2. Beneficial Occupation Date — when tenant gets early access\n3. Expiry Date / Lease End Date — when it ends\n4. Renewal Option Period — e.g. 1 x 5 years or 2 x 3 years\n5. Renewal Notice Deadline — last date to notify of renewal intent\n6. For FRANCHISE AGREEMENTS specifically extract Annexure A item 7 (Commencement Date) and item 8 (Duration/Period)\nAlso extract: physical store/shop premises address only (shop number and street, not head office), all party names and roles, and the governing clause for each date found. When extracting renewal information, specifically look for:\n- Renewal option clauses or schedules\n- Any explicit N/A, None, or Nil statements about renewal\n- The difference between silence on renewal (not mentioned) vs explicit exclusion (N/A stated)\nThis distinction is legally critical."
     reduce_task = f"""You MUST produce a SEPARATE expiry entry for EACH document marked with --- DOCUMENT START ---.
 For each document entry you MUST populate:
+- doc_type: Must be exactly one of: 'Lease Agreement' or 'Franchise Agreement'. Determine from the document content and filename. A franchise agreement typically contains terms like 'Franchisor', 'Franchisee', 'Franchise Fee'. A lease agreement typically contains terms like 'Lessor', 'Lessee', 'monthly rental', 'premises'.
 - commencement_date (never leave null if the document has a start date)
 - beneficial_occupation_date (null if absent)
 - expiry_date (MUST be a date in YYYY-MM-DD format. This is the date the agreement ends. NEVER leave this null if the document has an end date.)
@@ -538,8 +541,29 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return json.loads(raw)
 
+    from datetime import datetime
+
+    async def pipeline_wrapper():
+        async for chunk in run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op):
+            if chunk.startswith("data: "):
+                try:
+                    data_obj = json.loads(chunk[6:])
+                    if data_obj.get("status") == "complete":
+                        cache_data = {
+                            "workspace_id": str(workspace_id),
+                            "generated_at": datetime.utcnow().isoformat() + "Z",
+                            "document_context": data_obj.get("data", {}).get("document_context", {}),
+                            "expiries": data_obj.get("data", {}).get("expiries", [])
+                        }
+                        data_obj["data"] = cache_data
+                        yield f"data: {json.dumps(data_obj)}\n\n"
+                        continue
+                except Exception:
+                    pass
+            yield chunk
+
     cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
-    return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
+    return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, pipeline_wrapper()), media_type="text/event-stream")
 
 
 async def gap_analysis(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
