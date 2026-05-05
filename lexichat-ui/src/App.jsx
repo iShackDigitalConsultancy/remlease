@@ -2439,8 +2439,10 @@ END:VCALENDAR`;
                    )}
                    <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-slate-50/50">
                      
-                     {(Array.isArray(timelineData.fundamental_terms) ? timelineData.fundamental_terms : [timelineData.fundamental_terms]).filter(Boolean).map((termData, index) => (
-                       <div key={index} className="mb-12 last:mb-0 border-b-2 border-dashed border-slate-200 pb-12 last:border-0 last:pb-0">
+                     {(Array.isArray(timelineData.fundamental_terms) ? timelineData.fundamental_terms : [timelineData.fundamental_terms]).filter(Boolean).map((termData, index) => {
+                        const partyLabels = termData?.doc_type === "Franchise Agreement" ? { a: "FRANCHISOR", b: "FRANCHISEE" } : termData?.doc_type === "Sale Agreement" ? { a: "SELLER", b: "PURCHASER" } : termData?.doc_type === "Lease Agreement" ? { a: "LESSOR", b: "LESSEE" } : { a: "PARTY A", b: "PARTY B" };
+                        return (
+                        <div key={index} className="mb-12 last:mb-0 border-b-2 border-dashed border-slate-200 pb-12 last:border-0 last:pb-0">
                          {termData.document && (
                            <div className="flex items-center gap-3 mb-6 bg-slate-100 p-4 rounded-xl border border-slate-200">
                              <h2 className="text-lg font-bold text-slate-800">{termData.document}</h2>
@@ -2456,7 +2458,7 @@ END:VCALENDAR`;
                         {/* Lessor Card */}
                         <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6">
                           <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <Building2 size={16} className="text-brand-blue" /> Lessor
+                            <Building2 size={16} className="text-brand-blue" /> {partyLabels.a}
                           </h3>
                           <div className="space-y-3">
                             <div><span className="text-[10px] uppercase text-slate-400 font-bold">Name</span><p className="text-sm font-medium text-slate-900">{safeStr(termData?.lessor?.name)}</p></div>
@@ -2469,7 +2471,7 @@ END:VCALENDAR`;
                         {/* Lessee Card */}
                         <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6">
                           <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <Users size={16} className="text-brand-accent" /> Lessee
+                            <Users size={16} className="text-brand-accent" /> {partyLabels.b}
                           </h3>
                           <div className="space-y-3">
                             <div><span className="text-[10px] uppercase text-slate-400 font-bold">Name</span><p className="text-sm font-medium text-slate-900">{safeStr(termData?.lessee?.name)}</p></div>
@@ -2647,7 +2649,7 @@ END:VCALENDAR`;
                      
 
                        </div>
-                     ))}                   </div>
+                      ); })}                   </div>
                  </div>
               ) : (
                  <div className="flex-1 flex flex-col items-center justify-center text-red-500 gap-4">

@@ -133,9 +133,21 @@ def build_fundamental_terms_pdf(report_data, workspace_name, document_names) -> 
         story.append(Paragraph("<b>Parties</b>", styles['Heading2']))
         lessor = ft.get("lessor", {})
         lessee = ft.get("lessee", {})
+        
+        doc_type = ft.get("doc_type", "")
+        if "Franchise" in doc_type:
+            party_a = "Franchisor"
+            party_b = "Franchisee"
+        elif "Sale" in doc_type:
+            party_a = "Seller"
+            party_b = "Purchaser"
+        else:
+            party_a = "Lessor"
+            party_b = "Lessee"
+            
         parties_data = [
-            [Paragraph("<b>Lessor</b>", styles['Normal']),
-             Paragraph("<b>Lessee</b>", styles['Normal'])],
+            [Paragraph(f"<b>{party_a}</b>", styles['Normal']),
+             Paragraph(f"<b>{party_b}</b>", styles['Normal'])],
             [Paragraph(f"<b>Name:</b> {safe(lessor.get('name'))}", styles['Normal']),
              Paragraph(f"<b>Name:</b> {safe(lessee.get('name'))}", styles['Normal'])],
             [Paragraph(f"<b>Reg:</b> {safe(lessor.get('registration'))}", styles['Normal']),
