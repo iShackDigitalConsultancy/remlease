@@ -747,7 +747,27 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                 expiries = cached.get("expiries", [])
                 for exp in expiries:
                     doc_name = str(exp.get("document", ""))
-                    doc_type = "Franchise Agreement" if "franchise" in doc_name.lower() or "fa " in doc_name.lower() else "Lease Agreement"
+                    # Prefer AI-extracted doc_type from cache
+                    ai_doc_type = exp.get("doc_type")
+                    if ai_doc_type in [
+                        "Lease Agreement", 
+                        "Franchise Agreement"
+                    ]:
+                        doc_type = ai_doc_type
+                    else:
+                        # Fallback: filename-based detection
+                        doc_name_lower = doc_name.lower()
+                        doc_type = (
+                            "Franchise Agreement" 
+                            if (
+                                "franchise" in doc_name_lower or
+                                "_fa_" in doc_name_lower or
+                                "_fa." in doc_name_lower or
+                                " fa " in doc_name_lower or
+                                "fa_" in doc_name_lower
+                            )
+                            else "Lease Agreement"
+                        )
                     
                     ws_summary["documents"].append({
                         "filename": doc_name,
