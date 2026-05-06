@@ -459,7 +459,125 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     '    }'
 )
 
-    map_task = "Extract all dates, deadlines, and timeframes from this section. You MUST extract ALL of these specific fields if present:\n1. Commencement Date — when the lease/agreement starts\n2. Beneficial Occupation Date — when tenant gets early access\n3. Expiry Date / Lease End Date — when it ends\nRENEWAL EXTRACTION RULES:\nExtract ONLY what is explicitly stated.\nDo NOT calculate dates — extract raw values.\n\n1. renewal_type: Must be exactly one of:\n   none | manual | automatic | opt_out |\n   tenant_option | landlord_option |\n   mutual_option | conditional_option |\n   performance_based\n   \n   Classification guide:\n   - 'auto-renews unless...' = opt_out\n   - 'either party may cancel' = opt_out\n   - 'tenant may renew by notice' = manual\n   - 'landlord may renew' = landlord_option\n   - 'shall automatically renew' = automatic\n   - 'no renewal' or 'N/A' = none\n\n2. notice_min_months: Integer. Extract from\n   'not less than X months' or \n   'at least X months'. \n   If not stated set to null.\n\n3. notice_max_months: Integer or null.\n   Extract from 'not more than X months'.\n   Many agreements have no upper bound —\n   set to null if only minimum stated.\n\n4. requires_notice: true/false.\n   false for automatic renewal.\n   true for manual, opt_out, tenant_option.\n\n5. notice_party: tenant | landlord | \n   either | mutual\n   Who must give notice.\n\n6. renewal_action_required: true/false.\n   false if automatic with no opt-out needed.\n\n7. renewal_period_years: Integer or null.\n   The renewal PERIOD — may differ from \n   original term. e.g. original 5 years,\n   renewal 3 years.\n\n8. renewal_clause_text: Copy verbatim up to\n   50 words of the renewal clause.\n   This is for auditability.\n\n9. clause_confidence: Float 0.0-1.0.\n   0.95+ = clause found verbatim and clear\n   0.70-0.94 = clause found but ambiguous\n   below 0.70 = inferred, not explicit\n\n10. raw_commencement_date: Date as written\n    in document. YYYY-MM-DD format.\n    \n11. commencement_date_type: Must be one of:\n    legal_commencement | \n    beneficial_occupation |\n    rental_commencement |\n    fitout_commencement |\n    possession_date\n    \n    CRITICAL: Do NOT use rental schedule \n    dates as legal_commencement.\n    Priority order:\n    1. Explicit 'Commencement Date' clause\n    2. Lease commencement clause\n    3. Beneficial occupation date\n    4. Rental schedule date (lowest priority)\n    \n    calculation_source_priority field must\n    reflect which source was used:\n    explicit_clause | definition_section |\n    schedule | rental_table\n\n12. raw_expiry_date: Date as written.\n    YYYY-MM-DD. null if not explicit.\n\n13. duration_years: Integer. Extract from\n    'period of X years' clause.\n\nAll other date calculations will be \nperformed by the deterministic date engine.\nDo NOT calculate renewal deadlines.\nDo NOT calculate expiry from commencement.\nExtract raw values only."
+    map_task = """Extract all dates, deadlines, and timeframes from this section. You MUST extract ALL of these specific fields if present:
+1. Commencement Date — when the lease/agreement starts
+2. Beneficial Occupation Date — when tenant gets early access
+3. Expiry Date / Lease End Date — when it ends
+RENEWAL EXTRACTION RULES:
+Extract ONLY what is explicitly stated.
+Do NOT calculate dates — extract raw values.
+
+1. renewal_type: Must be exactly one of:
+   none | manual | automatic | opt_out |
+   tenant_option | landlord_option |
+   mutual_option | conditional_option |
+   performance_based
+   
+   Classification guide:
+   - 'auto-renews unless...' = opt_out
+   - 'either party may cancel' = opt_out
+   - 'tenant may renew by notice' = manual
+   - 'landlord may renew' = landlord_option
+   - 'shall automatically renew' = automatic
+   - 'no renewal' or 'N/A' = none
+
+   CRITICAL: If the document contains any of:
+   - 'N/A' adjacent to renewal option
+   - 'no renewal' or 'no option to renew'
+   - 'option to renew: N/A'
+   - Schedule item explicitly showing N/A
+   Then renewal_type MUST be 'none'.
+   Do NOT infer a renewal option unless 
+   explicitly stated in a renewal clause.
+   The absence of a renewal clause means none.
+   A holdover/month-to-month clause is NOT
+   a renewal option — it is a different 
+   legal mechanism.
+
+2. notice_min_months: Integer. Extract from
+   'not less than X months' or 
+   'at least X months'. 
+   If not stated set to null.
+
+3. notice_max_months: Integer or null.
+   Extract from 'not more than X months'.
+   Many agreements have no upper bound —
+   set to null if only minimum stated.
+
+4. requires_notice: true/false.
+   false for automatic renewal.
+   true for manual, opt_out, tenant_option.
+
+5. notice_party: tenant | landlord | 
+   either | mutual
+   Who must give notice.
+
+6. renewal_action_required: true/false.
+   false if automatic with no opt-out needed.
+
+7. renewal_period_years: Integer or null.
+   The renewal PERIOD — may differ from 
+   original term. e.g. original 5 years,
+   renewal 3 years.
+
+8. renewal_clause_text: Copy verbatim up to
+   50 words of the renewal clause.
+   This is for auditability.
+   
+   Do NOT confuse holdover clauses with 
+   renewal options. A holdover clause 
+   ('deemed to lease on monthly basis') 
+   is what happens AFTER expiry with no 
+   renewal — it is NOT a renewal mechanism.
+   renewal_clause_text must quote the actual 
+   renewal option clause, not the holdover.
+
+9. clause_confidence: Float 0.0-1.0.
+   0.95+ = clause found verbatim and clear
+   0.70-0.94 = clause found but ambiguous
+   below 0.70 = inferred, not explicit
+
+10. raw_commencement_date: Date as written
+    in document. YYYY-MM-DD format.
+    
+    For FRANCHISE AGREEMENTS:
+    Commencement date is in Annexure A item 7.
+    Duration is in Annexure A item 8.
+    These are CRITICAL fields — search 
+    specifically in Annexure A before 
+    returning null.
+    
+11. commencement_date_type: Must be one of:
+    legal_commencement | 
+    beneficial_occupation |
+    rental_commencement |
+    fitout_commencement |
+    possession_date
+    
+    CRITICAL: Do NOT use rental schedule 
+    dates as legal_commencement.
+    Priority order:
+    1. Explicit 'Commencement Date' clause
+    2. Lease commencement clause
+    3. Beneficial occupation date
+    4. Rental schedule date (lowest priority)
+    
+    calculation_source_priority field must
+    reflect which source was used:
+    explicit_clause | definition_section |
+    schedule | rental_table
+
+12. raw_expiry_date: Date as written.
+    YYYY-MM-DD. null if not explicit.
+
+13. duration_years: Integer. Extract from
+    'period of X years' clause.
+
+All other date calculations will be 
+performed by the deterministic date engine.
+Do NOT calculate renewal deadlines.
+Do NOT calculate expiry from commencement.
+Extract raw values only."""
     reduce_task = f"""You MUST produce a SEPARATE expiry entry for EACH document marked with --- DOCUMENT START ---.
 For each document entry you MUST populate:
 - doc_type: Must be exactly one of: 'Lease Agreement' or 'Franchise Agreement'. Determine from the document content and filename. A franchise agreement typically contains terms like 'Franchisor', 'Franchisee', 'Franchise Fee'. A lease agreement typically contains terms like 'Lessor', 'Lessee', 'monthly rental', 'premises'.
