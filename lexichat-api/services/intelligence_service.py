@@ -691,77 +691,6 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                     if data_obj.get("status") == "complete":
                         result = data_obj.get("data", {})
                         
-                        for exp in result.get("expiries", []):
-                            # Calculate expiry from commencement
-                            if (exp.get("raw_commencement_date") 
-                                and exp.get("duration_years")):
-                                calc = calculate_expiry(
-                                    exp["raw_commencement_date"],
-                                    exp["duration_years"],
-                                    "day_before"
-                                )
-                                exp["calculated_expiry_date"] = calc["date"]
-                                exp["expiry_calculation_basis"] = calc["basis"]
-                                
-                                # If raw_expiry differs by more than 1 day flag it
-                                raw = exp.get("raw_expiry_date")
-                                if raw and calc["date"] and raw != calc["date"]:
-                                    try:
-                                        raw_d = datetime.strptime(raw, "%Y-%m-%d").date()
-                                        calc_d = datetime.strptime(calc["date"], "%Y-%m-%d").date()
-                                        diff = abs((raw_d - calc_d).days)
-                                        if diff > 1:
-                                            exp["expiry_date_mismatch"] = True
-                                            exp["expiry_date_mismatch_days"] = diff
-                                    except ValueError:
-                                        pass
-                                
-                                # Use calculated as canonical expiry
-                                exp["expiry_date"] = exp.get("calculated_expiry_date") or exp.get("raw_expiry_date")
-                            else:
-                                exp["expiry_date"] = exp.get("raw_expiry_date")
-                            
-                            # Calculate renewal window if notice months are known
-                            expiry = exp.get("expiry_date")
-                            min_m = exp.get("notice_min_months")
-                            max_m = exp.get("notice_max_months")
-                            
-                            if expiry and min_m:
-                                window = calculate_renewal_window(
-                                    expiry, 
-                                    min_m, 
-                                    max_m or min_m
-                                )
-                                exp["renewal_notice_earliest"] = window["renewal_notice_earliest"]
-                                exp["renewal_notice_latest"] = window["renewal_notice_latest"]
-                                exp["renewal_window_basis"] = window["basis"]
-                                
-                                # Check current window status
-                                status = check_renewal_window_status(
-                                    expiry,
-                                    min_m,
-                                    max_m or min_m
-                                )
-                                exp["renewal_window_status"] = status["status"]
-                                exp["renewal_urgency"] = status["urgency"]
-                                exp["days_until_expiry"] = status["days_until_expiry"]
-                            
-                            if expiry and not exp.get("days_until_expiry"):
-                                from services.date_engine import days_between
-                                from datetime import date
-                                today = date.today().isoformat()
-                                db_result = days_between(today, expiry)
-                                if db_result.get("days") is not None:
-                                    exp["days_until_expiry"] = db_result["days"]
-                            
-                            # Check beneficial occupation
-                            bo = exp.get("beneficial_occupation_date")
-                            comm = exp.get("raw_commencement_date")
-                            if bo and comm:
-                                bo_check = is_beneficial_occupation_significant(bo, comm)
-                                exp["beneficial_occupation_flag"] = bo_check["flag"]
-                                exp["beneficial_occupation_days"] = bo_check["days_difference"]
-
                         # Cross-reference fundamental_terms cache
                         # to fill DocuSign form field gaps
                         ft_cache_path = os.path.join(
@@ -856,6 +785,77 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                             break
                             except Exception as e:
                                 print(f"Cache cross-ref error: {e}")
+                                
+                        for exp in result.get("expiries", []):
+                            # Calculate expiry from commencement
+                            if (exp.get("raw_commencement_date") 
+                                and exp.get("duration_years")):
+                                calc = calculate_expiry(
+                                    exp["raw_commencement_date"],
+                                    exp["duration_years"],
+                                    "day_before"
+                                )
+                                exp["calculated_expiry_date"] = calc["date"]
+                                exp["expiry_calculation_basis"] = calc["basis"]
+                                
+                                # If raw_expiry differs by more than 1 day flag it
+                                raw = exp.get("raw_expiry_date")
+                                if raw and calc["date"] and raw != calc["date"]:
+                                    try:
+                                        raw_d = datetime.strptime(raw, "%Y-%m-%d").date()
+                                        calc_d = datetime.strptime(calc["date"], "%Y-%m-%d").date()
+                                        diff = abs((raw_d - calc_d).days)
+                                        if diff > 1:
+                                            exp["expiry_date_mismatch"] = True
+                                            exp["expiry_date_mismatch_days"] = diff
+                                    except ValueError:
+                                        pass
+                                
+                                # Use calculated as canonical expiry
+                                exp["expiry_date"] = exp.get("calculated_expiry_date") or exp.get("raw_expiry_date")
+                            else:
+                                exp["expiry_date"] = exp.get("raw_expiry_date")
+                            
+                            # Calculate renewal window if notice months are known
+                            expiry = exp.get("expiry_date")
+                            min_m = exp.get("notice_min_months")
+                            max_m = exp.get("notice_max_months")
+                            
+                            if expiry and min_m:
+                                window = calculate_renewal_window(
+                                    expiry, 
+                                    min_m, 
+                                    max_m or min_m
+                                )
+                                exp["renewal_notice_earliest"] = window["renewal_notice_earliest"]
+                                exp["renewal_notice_latest"] = window["renewal_notice_latest"]
+                                exp["renewal_window_basis"] = window["basis"]
+                                
+                                # Check current window status
+                                status = check_renewal_window_status(
+                                    expiry,
+                                    min_m,
+                                    max_m or min_m
+                                )
+                                exp["renewal_window_status"] = status["status"]
+                                exp["renewal_urgency"] = status["urgency"]
+                                exp["days_until_expiry"] = status["days_until_expiry"]
+                            
+                            if expiry and not exp.get("days_until_expiry"):
+                                from services.date_engine import days_between
+                                from datetime import date
+                                today = date.today().isoformat()
+                                db_result = days_between(today, expiry)
+                                if db_result.get("days") is not None:
+                                    exp["days_until_expiry"] = db_result["days"]
+                            
+                            # Check beneficial occupation
+                            bo = exp.get("beneficial_occupation_date")
+                            comm = exp.get("raw_commencement_date")
+                            if bo and comm:
+                                bo_check = is_beneficial_occupation_significant(bo, comm)
+                                exp["beneficial_occupation_flag"] = bo_check["flag"]
+                                exp["beneficial_occupation_days"] = bo_check["days_difference"]
 
                         cache_data = {
                             "workspace_id": str(workspace_id),
