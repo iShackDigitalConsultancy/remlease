@@ -540,6 +540,17 @@ Do NOT calculate dates — extract raw values.
 10. raw_commencement_date: Date as written
     in document. YYYY-MM-DD format.
     
+    # NOTE: DocuSign-completed franchise agreements
+    # may have Annexure A values (item 7 date,
+    # item 8 duration) detached from their labels
+    # in the LlamaParse output due to floating 
+    # form field rendering. This is a document
+    # ingestion limitation. If commencement 
+    # returns null for franchise agreements,
+    # it indicates a DocuSign form PDF where
+    # spatial reconstruction failed.
+    # Future fix: post-process .md files to
+    # reconstruct form field label-value pairs.
     For FRANCHISE AGREEMENTS specifically:
     Annexure A contains Financial and Other Terms.
     You MUST search for and extract:
