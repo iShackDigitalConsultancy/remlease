@@ -540,12 +540,29 @@ Do NOT calculate dates — extract raw values.
 10. raw_commencement_date: Date as written
     in document. YYYY-MM-DD format.
     
-    For FRANCHISE AGREEMENTS:
-    Commencement date is in Annexure A item 7.
-    Duration is in Annexure A item 8.
-    These are CRITICAL fields — search 
-    specifically in Annexure A before 
-    returning null.
+    For FRANCHISE AGREEMENTS specifically:
+    Annexure A contains Financial and Other Terms.
+    You MUST search for and extract:
+    - Item 7 or 'Commencement Date' in Annexure A
+      → this is raw_commencement_date
+    - Item 8 or 'Duration' in Annexure A  
+      → this is duration_years
+    - Item 1 or 'Upfront License Fee' in Annexure A
+    - Item 2 or 'Franchise Fee' percentage
+
+    The Commencement Date in Annexure A is 
+    typically written as a specific date like
+    '1 July 2023' or '2023-07-01'.
+    Convert to YYYY-MM-DD format.
+
+    If you see text like:
+    '7. Commencement Date: 1 July 2023'
+    or 
+    'Commencement Date    1 July 2023'
+    Extract '2023-07-01' as raw_commencement_date.
+
+    Do NOT return null for franchise commencement
+    if Annexure A is present in the document.
     
 11. commencement_date_type: Must be one of:
     legal_commencement | 
@@ -582,6 +599,7 @@ Extract raw values only."""
 For each document entry you MUST populate:
 - doc_type: Must be exactly one of: 'Lease Agreement' or 'Franchise Agreement'. Determine from the document content and filename. A franchise agreement typically contains terms like 'Franchisor', 'Franchisee', 'Franchise Fee'. A lease agreement typically contains terms like 'Lessor', 'Lessee', 'monthly rental', 'premises'.
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
+For franchise agreements: if any map result contains a commencement date from Annexure A, use it as raw_commencement_date. Annexure A data takes priority over body text for financial and date terms.
 Output ONLY valid JSON matching this exact structure:
 {{
   "document_context": {{
