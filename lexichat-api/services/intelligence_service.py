@@ -754,6 +754,101 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                 exp["beneficial_occupation_flag"] = bo_check["flag"]
                                 exp["beneficial_occupation_days"] = bo_check["days_difference"]
 
+                        # Cross-reference fundamental_terms cache
+                        # to fill DocuSign form field gaps
+                        ft_cache_path = os.path.join(
+                            UPLOAD_DIR,
+                            f"{workspace_id}_fundamental_terms.json"
+                        )
+                        if os.path.exists(ft_cache_path):
+                            try:
+                                with open(ft_cache_path, "r") as f:
+                                    ft_cache = json.load(f)
+                                ft_items = ft_cache.get(
+                                    "fundamental_terms", [])
+                                if isinstance(ft_items, dict):
+                                    ft_items = [ft_items]
+                                
+                                for exp in result.get("expiries", []):
+                                    if exp.get("raw_commencement_date"):
+                                        continue  # already have it
+                                    
+                                    doc_type = exp.get("doc_type","")
+                                    if "Franchise" not in doc_type:
+                                        continue
+                                        
+                                    # Find matching franchise entry
+                                    # in fundamental_terms cache
+                                    for ft in ft_items:
+                                        if "Franchise" not in str(
+                                            ft.get("doc_type","")):
+                                            continue
+                                        
+                                        ft_comm = ft.get(
+                                            "commencement_date") or \
+                                            ft.get("franchise_terms",
+                                            {}).get("commencement_date")
+                                        ft_duration = None
+                                        ft_expiry = ft.get(
+                                            "expiry_date") or \
+                                            ft.get("franchise_terms",
+                                            {}).get("expiry_date")
+                                        
+                                        if ft_comm:
+                                            exp["raw_commencement_date"]\
+                                                = ft_comm
+                                            exp["commencement_source"] \
+                                                = "fundamental_terms_cache"
+                                            
+                                            # Recalculate expiry if 
+                                            # we now have commencement
+                                            # Try to get duration from
+                                            # ft or calculate from expiry
+                                            if ft_expiry and ft_comm:
+                                                try:
+                                                    from datetime import\
+                                                        datetime
+                                                    c = datetime.strptime(
+                                                        ft_comm,
+                                                        "%Y-%m-%d")
+                                                    e = datetime.strptime(
+                                                        ft_expiry,
+                                                        "%Y-%m-%d")
+                                                    years = (
+                                                        e.year - c.year)
+                                                    exp["duration_years"]\
+                                                        = years
+                                                except Exception:
+                                                    pass
+                                            
+                                            # Recalculate expiry
+                                            if exp.get(
+                                                "raw_commencement_date")\
+                                                and exp.get(
+                                                "duration_years"):
+                                                from services.date_engine\
+                                                    import calculate_expiry
+                                                calc = calculate_expiry(
+                                                    exp[
+                                                    "raw_commencement_date"
+                                                    ],
+                                                    exp["duration_years"],
+                                                    "day_before"
+                                                )
+                                                exp["calculated_expiry_date"]\
+                                                    = calc["date"]
+                                                exp["expiry_date"] = \
+                                                    calc["date"]
+                                                exp[
+                                                "expiry_calculation_basis"
+                                                ] = calc["basis"] + \
+                                                    " (commencement from" \
+                                                    " fundamental_terms" \
+                                                    " cache)"
+                                            break
+                            except Exception as e:
+                                print(f"Cache cross-ref error: {e}")
+
                         cache_data = {
                             "workspace_id": str(workspace_id),
                             "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -947,7 +1042,8 @@ def detect_renewal_mismatch(
         "severity": None,
         "description": None,
         "lease_can_renew": None,
-        "franchise_can_renew": None
+        "franchise_can_renew": None,
+        "rules_triggered": []
     }
     
     if not lease_docs or not franchise_docs:
@@ -1012,6 +1108,130 @@ def detect_renewal_mismatch(
                 "to renew."
         })
     
+    # Rule 2: Lease expires before franchise
+    lease_expiry = lease.get("expiry_date")
+    franchise_expiry = franchise.get("expiry_date")
+
+    if lease_expiry and franchise_expiry:
+        try:
+            from datetime import datetime
+            le = datetime.strptime(
+                lease_expiry, "%Y-%m-%d")
+            fe = datetime.strptime(
+                franchise_expiry, "%Y-%m-%d")
+            if le < fe:
+                result["rules_triggered"] = \
+                    result.get(
+                        "rules_triggered", [])
+                result["rules_triggered"].append({
+                    "rule": "RULE-002",
+                    "title": "Lease expires before"
+                        " franchise",
+                    "severity": "High",
+                    "description": 
+                        f"Lease expires {lease_expiry}"
+                        f" before franchise"
+                        f" {franchise_expiry}."
+                        f" Business rights extend"
+                        f" beyond secured occupation."
+                })
+        except Exception:
+            pass
+
+    # Rule 3: Renewal window timing mismatch
+    lease_earliest = lease.get(
+        "renewal_notice_earliest")
+    franchise_earliest = franchise.get(
+        "renewal_notice_earliest")
+
+    if lease_earliest and franchise_earliest:
+        try:
+            from datetime import datetime
+            ld = datetime.strptime(
+                lease_earliest, "%Y-%m-%d")
+            fd = datetime.strptime(
+                franchise_earliest, "%Y-%m-%d")
+            diff_days = abs((ld - fd).days)
+            if diff_days > 60:
+                result.setdefault(
+                    "rules_triggered", []).append({
+                    "rule": "RULE-003",
+                    "title": "Renewal window"
+                        " timing mismatch",
+                    "severity": "Medium",
+                    "description":
+                        f"Lease and franchise renewal"
+                        f" notice windows differ by"
+                        f" {diff_days} days. Coordinate"
+                        f" renewal actions carefully."
+                })
+        except Exception:
+            pass
+
+    # Rule 4: Significant beneficial occupation
+    lease_bo = lease.get(
+        "beneficial_occupation_date")
+    lease_comm = lease.get(
+        "raw_commencement_date")
+    if lease_bo and lease_comm:
+        bo_flag = lease.get(
+            "beneficial_occupation_flag")
+        bo_days = lease.get(
+            "beneficial_occupation_days", 0)
+        if bo_flag and bo_days >= 30:
+            result.setdefault(
+                "rules_triggered", []).append({
+                "rule": "RULE-004",
+                "title": "Pre-trading occupation"
+                    " exposure",
+                "severity": "Medium",
+                "description":
+                    f"Beneficial occupation"
+                    f" {bo_days} days before legal"
+                    f" commencement. Tenant occupied"
+                    f" and trading before lease"
+                    f" legally commenced."
+            })
+
+    # Rule 5: Renewal window already missed
+    for doc in [lease, franchise]:
+        status = doc.get("renewal_window_status")
+        if status in [
+            "window_closed_renewal_possible",
+            "too_late_rights_lapsed"
+        ]:
+            urgency = "Critical" if status == \
+                "too_late_rights_lapsed" else "High"
+            result.setdefault(
+                "rules_triggered", []).append({
+                "rule": "RULE-005",
+                "title": f"Renewal window issue:"
+                    f" {doc.get('document','')}",
+                "severity": urgency,
+                "description":
+                    f"Renewal window status:"
+                    f" {status}. Immediate"
+                    f" attention required."
+            })
+
+    # Rule 6: Neither can renew
+    if not lease_can_renew and \
+       not franchise_can_renew:
+        result.setdefault(
+            "rules_triggered", []).append({
+            "rule": "RULE-006",
+            "title": "No renewal rights"
+                " on either agreement",
+            "severity": "High",
+            "description":
+                "Neither the lease nor the"
+                " franchise agreement contains"
+                " a renewal option. Both will"
+                " expire without right to renew."
+                " New agreements must be"
+                " negotiated before expiry."
+        })
+
     return result
 
 async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -1090,6 +1310,8 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                     })
                 
                 mismatch = detect_renewal_mismatch(ws_summary["documents"])
+                ws_summary["rules_triggered"] = \
+                    mismatch.get("rules_triggered", [])
                 ws_summary["renewal_mismatch"] = mismatch
                 ws_summary["earliest_deadline"] = min(
                     (e.get("renewal_deadline") 
