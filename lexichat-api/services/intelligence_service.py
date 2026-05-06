@@ -746,6 +746,14 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                 exp["renewal_urgency"] = status["urgency"]
                                 exp["days_until_expiry"] = status["days_until_expiry"]
                             
+                            if expiry and not exp.get("days_until_expiry"):
+                                from services.date_engine import days_between
+                                from datetime import date
+                                today = date.today().isoformat()
+                                db_result = days_between(today, expiry)
+                                if db_result.get("days") is not None:
+                                    exp["days_until_expiry"] = db_result["days"]
+                            
                             # Check beneficial occupation
                             bo = exp.get("beneficial_occupation_date")
                             comm = exp.get("raw_commencement_date")
@@ -1052,17 +1060,27 @@ def detect_renewal_mismatch(
     lease = lease_docs[0]
     franchise = franchise_docs[0]
     
-    lease_renewal = lease.get(
-        "renewal_option_period")
-    franchise_renewal = franchise.get(
-        "renewal_option_period")
-    
-    lease_can_renew = (
-        lease_renewal not in null_values
-    )
-    franchise_can_renew = (
-        franchise_renewal not in null_values
-    )
+    lease_renewal_type = lease.get(
+        "renewal_type", "none")
+    franchise_renewal_type = franchise.get(
+        "renewal_type", "none")
+
+    lease_can_renew = lease_renewal_type \
+        not in ["none", None, "null", ""]
+    franchise_can_renew = franchise_renewal_type\
+        not in ["none", None, "null", ""]
+
+    if lease_renewal_type is None:
+        lease_renewal = lease.get(
+            "renewal_option_period")
+        lease_can_renew = (
+            lease_renewal not in null_values)
+
+    if franchise_renewal_type is None:
+        franchise_renewal = franchise.get(
+            "renewal_option_period")
+        franchise_can_renew = (
+            franchise_renewal not in null_values)
     
     result["lease_can_renew"] = lease_can_renew
     result["franchise_can_renew"] = \
@@ -1306,7 +1324,9 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                         "renewal_urgency": exp.get("renewal_urgency"),
                         "days_until_expiry": exp.get("days_until_expiry"),
                         "renewal_notice_earliest": exp.get("renewal_notice_earliest"),
-                        "renewal_notice_latest": exp.get("renewal_notice_latest")
+                        "renewal_notice_latest": exp.get("renewal_notice_latest"),
+                        "notice_min_months": exp.get("notice_min_months"),
+                        "notice_max_months": exp.get("notice_max_months")
                     })
                 
                 mismatch = detect_renewal_mismatch(ws_summary["documents"])
