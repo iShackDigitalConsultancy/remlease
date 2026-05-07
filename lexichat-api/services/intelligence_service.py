@@ -1330,9 +1330,20 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                     })
                 
                 mismatch = detect_renewal_mismatch(ws_summary["documents"])
+                
+                from services.risk_engine import \
+                    calculate_workspace_risk_scores
+                risk_scores = calculate_workspace_risk_scores(
+                    ws_summary["documents"], mismatch)
+                
                 ws_summary["rules_triggered"] = \
                     mismatch.get("rules_triggered", [])
                 ws_summary["renewal_mismatch"] = mismatch
+                ws_summary["risk_scores"] = risk_scores
+                ws_summary["overall_risk_score"] = \
+                    risk_scores.get("overall_risk_score")
+                ws_summary["overall_severity"] = \
+                    risk_scores.get("overall_severity")
                 ws_summary["earliest_deadline"] = min(
                     (e.get("renewal_deadline") 
                      for e in ws_summary["documents"] 
