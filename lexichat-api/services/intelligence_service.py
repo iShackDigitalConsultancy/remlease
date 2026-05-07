@@ -596,12 +596,47 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                     "manual_renewal", "automatic_renewal", "automatic_renewal_with_opt_out", 
                                     "tenant_option", "landlord_option", "mutual_option", "no_renewal_right", "unknown"
                                 }
+                                
+                                def is_iso_date(val):
+                                    if not isinstance(val, str): return False
+                                    try:
+                                        from datetime import datetime
+                                        datetime.strptime(val, "%Y-%m-%d")
+                                        return True
+                                    except Exception:
+                                        return False
 
                                 def resolve_candidates(field_key, candidates, v_flags):
                                     if not candidates: return None
                                     if not isinstance(candidates, list): return candidates
                                     
                                     sorted_cands = sorted(candidates, key=lambda x: x.get("priority", 99) if isinstance(x, dict) else 99)
+                                    
+                                    # Conflict detection
+                                    valid_vals = []
+                                    for c in sorted_cands:
+                                        if isinstance(c, dict) and "value" in c:
+                                            v = c["value"]
+                                            if field_key.endswith("date") or "notice" in field_key:
+                                                if is_iso_date(v): valid_vals.append(v)
+                                            elif field_key == "renewal_type":
+                                                if v in ALLOWED_RENEWAL_TYPES: valid_vals.append(v)
+                                            else:
+                                                valid_vals.append(v)
+                                                
+                                    if len(set(valid_vals)) > 1:
+                                        from datetime import datetime
+                                        conflict = False
+                                        if field_key.endswith("date") or "notice" in field_key:
+                                            dates = [datetime.strptime(v, "%Y-%m-%d").date() for v in set(valid_vals)]
+                                            max_diff = (max(dates) - min(dates)).days
+                                            if "expiry" in field_key and max_diff > 30: conflict = True
+                                            elif "expiry" not in field_key and max_diff > 7: conflict = True
+                                        else:
+                                            conflict = True
+                                            
+                                        if conflict:
+                                            v_flags.append(f"Multiple conflicting candidates found for {field_key} — review source evidence")
                                     
                                     if field_key == "renewal_type":
                                         for cand in sorted_cands:
