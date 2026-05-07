@@ -162,3 +162,34 @@ def is_beneficial_occupation_significant(beneficial_occupation_date: str, legal_
         "basis": basis,
         "flag": flag
     }
+
+
+def calculate_renewal_date(expiry_date: str) -> dict:
+    d = _parse_date(expiry_date)
+    if not d:
+        return {"date": None, "basis": "Invalid expiry date", "confidence": 0.0}
+    renewal_d = d + timedelta(days=1)
+    return {"date": renewal_d.isoformat(), "basis": f"Renewal begins day after expiry ({expiry_date})", "confidence": 1.0}
+
+def validate_dates(legal_commencement: str, rental_commencement: str, beneficial_occupation: str, expiry: str, renewal_latest: str) -> list:
+    flags = []
+    
+    # Parse all
+    lc_d = _parse_date(legal_commencement)
+    rc_d = _parse_date(rental_commencement)
+    bo_d = _parse_date(beneficial_occupation)
+    exp_d = _parse_date(expiry)
+    rn_d = _parse_date(renewal_latest)
+    
+    if rn_d and lc_d and rn_d < lc_d:
+        flags.append("Renewal deadline is before legal commencement")
+        
+    if exp_d and rn_d:
+        diff_days = (exp_d - rn_d).days
+        if diff_days > (18 * 30):
+            flags.append("Renewal deadline appears excessively early (>18 months before expiry)")
+            
+    if rc_d and lc_d and rc_d == lc_d and bo_d and bo_d != lc_d:
+        flags.append("Rental commencement matches legal commencement, but beneficial occupation differs; verify if this is a rent-free period")
+
+    return flags
