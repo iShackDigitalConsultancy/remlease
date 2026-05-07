@@ -1465,8 +1465,138 @@ END:VCALENDAR`;
                       <p className="text-sm mt-2 text-slate-500 max-w-sm text-center">Llama 3 is reading through all agreements across your platform to map expiry dates and critical terms collectively.</p>
                   </div>
                ) : portfolioData && portfolioData.length > 0 ? (
-                  <div className="space-y-6">
-                      {portfolioData.map((ws, wsIdx) => (
+                  <>
+                      {portfolioData && portfolioData.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 
+                          gap-3 mb-6">
+                          
+                          {/* Highest risk site */}
+                          {(() => {
+                            const highest = [...portfolioData]
+                              .filter(ws => ws.overall_risk_score != null)
+                              .sort((a,b) => 
+                                b.overall_risk_score - 
+                                a.overall_risk_score)[0];
+                            return highest ? (
+                              <div className="p-3 bg-red-50 border 
+                                border-red-200 rounded-xl">
+                                <p className="text-[10px] font-bold 
+                                  text-red-500 uppercase">
+                                  Highest Risk Site
+                                </p>
+                                <p className="text-sm font-bold 
+                                  text-red-700 mt-1 truncate">
+                                  {highest.workspace_name}
+                                </p>
+                                <p className="text-xs text-red-600">
+                                  {highest.overall_risk_score}/100 — 
+                                  {highest.overall_severity}
+                                </p>
+                              </div>
+                            ) : null;
+                          })()}
+                          
+                          {/* Unprotected franchises */}
+                          {(() => {
+                            const count = portfolioData.filter(
+                              ws => ws.renewal_mismatch
+                                ?.mismatch_type === 
+                                'franchise_renewal_unprotected'
+                            ).length;
+                            return (
+                              <div className={`p-3 rounded-xl border
+                                ${count > 0 
+                                  ? 'bg-orange-50 border-orange-200' 
+                                  : 'bg-green-50 border-green-200'}`}>
+                                <p className="text-[10px] font-bold 
+                                  text-slate-500 uppercase">
+                                  Unprotected Franchises
+                                </p>
+                                <p className={`text-2xl font-bold mt-1
+                                  ${count > 0 
+                                    ? 'text-orange-600' 
+                                    : 'text-green-600'}`}>
+                                  {count}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {count > 0 
+                                    ? 'Require attention' 
+                                    : 'All protected'}
+                                </p>
+                              </div>
+                            );
+                          })()}
+                          
+                          {/* Renewals due within 365 days */}
+                          {(() => {
+                            const urgent = portfolioData.reduce(
+                              (acc, ws) => {
+                                const docs = ws.documents || [];
+                                return acc + docs.filter(d => 
+                                  d.days_until_expiry != null && 
+                                  d.days_until_expiry <= 365
+                                ).length;
+                              }, 0);
+                            return (
+                              <div className={`p-3 rounded-xl border
+                                ${urgent > 0 
+                                  ? 'bg-amber-50 border-amber-200' 
+                                  : 'bg-green-50 border-green-200'}`}>
+                                <p className="text-[10px] font-bold 
+                                  text-slate-500 uppercase">
+                                  Expiring Within 12 Months
+                                </p>
+                                <p className={`text-2xl font-bold mt-1
+                                  ${urgent > 0 
+                                    ? 'text-amber-600' 
+                                    : 'text-green-600'}`}>
+                                  {urgent}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {urgent > 0 
+                                    ? 'Documents expiring soon' 
+                                    : 'No urgent expiries'}
+                                </p>
+                              </div>
+                            );
+                          })()}
+                          
+                          {/* Portfolio average risk */}
+                          {(() => {
+                            const scores = portfolioData
+                              .map(ws => ws.overall_risk_score)
+                              .filter(s => s != null);
+                            const avg = scores.length 
+                              ? Math.round(
+                                  scores.reduce((a,b) => a+b, 0) / 
+                                  scores.length
+                                )
+                              : null;
+                            return avg != null ? (
+                              <div className="p-3 bg-slate-50 
+                                border border-slate-200 rounded-xl">
+                                <p className="text-[10px] font-bold 
+                                  text-slate-500 uppercase">
+                                  Portfolio Avg Risk
+                                </p>
+                                <p className={`text-2xl font-bold mt-1
+                                  ${avg >= 75 ? 'text-red-600'
+                                    : avg >= 50 ? 'text-orange-600'
+                                    : avg >= 25 ? 'text-amber-600'
+                                    : 'text-green-600'}`}>
+                                  {avg}/100
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  Across {scores.length} workspaces
+                                </p>
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
+                      )}
+                      
+                      <div className="space-y-6">
+                          {portfolioData.map((ws, wsIdx) => (
                          <div key={wsIdx} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                              <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                  <div>
@@ -1483,6 +1613,43 @@ END:VCALENDAR`;
                                           </span>
                                         )}
                                     </div>
+
+                                    {ws.overall_risk_score != null && (
+                                      <div className="flex items-center gap-2 
+                                        mt-1">
+                                        <span className={`text-xs font-bold 
+                                          px-2 py-0.5 rounded-full
+                                          ${ws.overall_severity === 'critical'
+                                            ? 'bg-red-100 text-red-700 border border-red-300'
+                                            : ws.overall_severity === 'high'
+                                            ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                                            : ws.overall_severity === 'medium'
+                                            ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                                            : 'bg-green-100 text-green-700 border border-green-300'
+                                          }`}>
+                                          Risk: {ws.overall_risk_score}/100 — 
+                                          {ws.overall_severity?.toUpperCase()}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {ws.risk_scores?.renewal_risk
+                                      ?.contributing_factors?.length > 0 && (
+                                      <div className="mt-2 space-y-1">
+                                        {ws.risk_scores.renewal_risk
+                                          .contributing_factors
+                                          .slice(0, 3)
+                                          .map((factor, i) => (
+                                          <p key={i} className="text-[10px] 
+                                            text-slate-500 flex items-start gap-1">
+                                            <span className="text-slate-400 
+                                              shrink-0">•</span>
+                                            {factor}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    )}
+
                                      {ws.property_location && (
                                          <p className="text-sm font-medium text-slate-500 flex items-center gap-1 mt-1">
                                              <MapPin size={14} className="text-slate-400" />
@@ -1568,6 +1735,7 @@ END:VCALENDAR`;
                          </div>
                       ))}
                   </div>
+                  </>
                ) : (
                   <div className="text-center p-12 bg-white border border-slate-200 rounded-2xl shadow-sm">
                       <p className="text-slate-500 font-bold mb-4">No documents found across your portfolios.</p>
