@@ -713,7 +713,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                                 try:
                                                     with open(cache_file, "r") as f:
                                                         cache_data = json.load(f)
-                                                        for cached_exp in cache_data:
+                                                        for cached_exp in cache_data.get("expiries", []):
                                                             if "franchise" not in cached_exp.get("doc_type", "").lower() and cached_exp.get("legal_commencement_date"):
                                                                 found_lease_date = cached_exp["legal_commencement_date"]
                                                                 break
