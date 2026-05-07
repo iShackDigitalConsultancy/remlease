@@ -698,23 +698,33 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                     is_franchise = "franchise" in dt.lower() or "franchise" in fname_lower or "fa_" in fname_lower
                                     
                                     if is_franchise and not exp.get("legal_commencement_date"):
-                                        cache_file = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
                                         found_lease_date = None
-                                        if os.path.exists(cache_file):
-                                            try:
-                                                with open(cache_file, "r") as f:
-                                                    cache_data = json.load(f)
-                                                    for cached_exp in cache_data:
-                                                        if "franchise" not in cached_exp.get("doc_type", "").lower() and cached_exp.get("legal_commencement_date"):
-                                                            found_lease_date = cached_exp["legal_commencement_date"]
-                                                            break
-                                            except:
-                                                pass
+                                        
+                                        # 1. Check current execution memory (if lease was processed just before this franchise)
+                                        for prev_exp in final_expiries:
+                                            if "franchise" not in prev_exp.get("doc_type", "").lower() and prev_exp.get("legal_commencement_date"):
+                                                found_lease_date = prev_exp["legal_commencement_date"]
+                                                break
+                                                
+                                        # 2. Check disk cache if not found in memory
+                                        if not found_lease_date:
+                                            cache_file = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
+                                            if os.path.exists(cache_file):
+                                                try:
+                                                    with open(cache_file, "r") as f:
+                                                        cache_data = json.load(f)
+                                                        for cached_exp in cache_data:
+                                                            if "franchise" not in cached_exp.get("doc_type", "").lower() and cached_exp.get("legal_commencement_date"):
+                                                                found_lease_date = cached_exp["legal_commencement_date"]
+                                                                break
+                                                except:
+                                                    pass
                                         
                                         if found_lease_date:
                                             exp["legal_commencement_date"] = found_lease_date
-                                            exp["date_resolution_status"] = "inferred_dependency"
-                                            v_flags.append("Date inferred from aligned lease")
+                                            exp["date_resolution_status"] = "inferred_from_aligned_lease"
+                                            exp["date_dependency"] = "franchise date inferred from same-site lease date"
+                                            v_flags.append("Franchise date inferred from aligned lease — verify against franchise Annexure A")
                                         else:
                                             exp["date_resolution_status"] = "dependency_required"
                                             exp["date_dependency"] = "requires legal_commencement_date"
