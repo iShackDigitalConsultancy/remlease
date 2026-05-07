@@ -422,6 +422,8 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
 
     if not documents_to_process:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
+        
+    documents_to_process.sort(key=lambda d: 1 if "franchise" in d["filename"].lower() or "fa_" in d["filename"].lower() else 0)
 
     async def pipeline_wrapper():
         from datetime import datetime
@@ -740,6 +742,11 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                         exp["deterministic_expiry_date"] = calc["date"]
                                         exp["expiry_calculation_basis"] = calc["basis"]
                                         
+                                        if exp.get("date_resolution_status") == "inferred_from_aligned_lease":
+                                            exp["expiry_date_resolution_status"] = "calculated_from_inferred_commencement"
+                                            exp["expiry_date_dependency"] = "uses inferred legal_commencement_date from aligned lease"
+                                            v_flags.append("Expiry calculated from inferred franchise commencement — verify against franchise Annexure A")
+                                        
                                         # Explicit Expiry Precedence
                                         if ai_expiry:
                                             from datetime import datetime
@@ -862,6 +869,19 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
         # Consolidate all results
         from services.risk_engine import calculate_workspace_risk_scores
         
+        cache_file = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r") as f:
+                    existing_data = json.load(f)
+                    existing_expiries = existing_data.get("expiries", [])
+                    new_doc_ids = [e.get("pinecone_doc_id") for e in final_expiries]
+                    for e in existing_expiries:
+                        if e.get("pinecone_doc_id") not in new_doc_ids:
+                            final_expiries.append(e)
+            except:
+                pass
+                
         ws_summary_docs = []
         for exp in final_expiries:
             ws_summary_docs.append({
