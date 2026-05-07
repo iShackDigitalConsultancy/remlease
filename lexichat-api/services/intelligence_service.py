@@ -864,20 +864,53 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                 exp["beneficial_occupation_days"] = bo_check["days_difference"]
 
                         expiries = result.get("expiries", [])
+                        def is_valid_filename(val):
+                            if not val:
+                                return False
+                            extensions = (
+                                '.pdf', '.docx', '.doc', 
+                                '.xlsx', '.txt', '.md'
+                            )
+                            val_str = str(val).strip()
+                            if len(val_str) > 200:
+                                return False
+                            if not any(val_str.lower().endswith(ext)
+                                       for ext in extensions):
+                                return False
+                            return True
+
                         for i, exp in enumerate(expiries):
-                            if not exp.get("document") or \
-                               exp.get("document") in [
-                                   "Unknown", "unknown", 
-                                   "Document", ""]:
-                                # Recover filename by index
+                            if not is_valid_filename(
+                                exp.get("document")):
+                                # Recover from filename_map
                                 if i < len(filename_map):
                                     exp["document"] = \
                                         filename_map[i]
                                 elif filename_map:
-                                    # Use first available
                                     exp["document"] = \
-                                        list(filename_map.values())[i % 
-                                        len(filename_map)]
+                                        list(filename_map.values())[
+                                            i % len(filename_map)]
+
+                        for exp in expiries:
+                            dt = exp.get("doc_type", "")
+                            if len(str(dt)) > 30 or dt not in [
+                                "Lease Agreement",
+                                "Franchise Agreement",
+                                "Sale Agreement",
+                                "Other"
+                            ]:
+                                # Infer from filename
+                                fname = str(
+                                    exp.get("document","")).lower()
+                                if any(x in fname for x in [
+                                    "franchise", "_fa_", "_fa.", 
+                                    "fa_"
+                                ]):
+                                    exp["doc_type"] = \
+                                        "Franchise Agreement"
+                                else:
+                                    exp["doc_type"] = \
+                                        "Lease Agreement"
 
                         cache_data = {
                             "workspace_id": str(workspace_id),
