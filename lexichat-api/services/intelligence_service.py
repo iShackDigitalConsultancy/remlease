@@ -381,6 +381,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
         
     full_text: str = ""
     filenames = []
+    filename_map = {}
     workspace_id = None
     for doc_id in payload.doc_ids:
         if current_user is not None:
@@ -409,6 +410,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
                     with open(file_path, "r") as f:
                         doc_text = f.read()
                     full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
+                    filename_map[len(filename_map)] = doc.filename
                     break
                 except Exception as e:
                     print(f"Failed to read {file_path}: {e}")
@@ -607,6 +609,10 @@ Do NOT calculate renewal deadlines.
 Do NOT calculate expiry from commencement.
 Extract raw values only."""
     reduce_task = f"""You MUST produce a SEPARATE expiry entry for EACH document marked with --- DOCUMENT START ---.
+CRITICAL: The 'document' field in each expiry entry MUST be copied EXACTLY from the --- DOCUMENT START: filename.pdf --- marker in the input text.
+Do NOT write 'Unknown', 'Document 1', or any invented name.
+If you cannot find the filename, copy the entire marker text between 'DOCUMENT START:' and '---'.
+Example: if input contains '--- DOCUMENT START: N1 Lease.pdf ---' then document must be exactly: 'N1 Lease.pdf'
 For each document entry you MUST populate:
 - doc_type: Must be exactly one of: 'Lease Agreement' or 'Franchise Agreement'. Determine from the document content and filename. A franchise agreement typically contains terms like 'Franchisor', 'Franchisee', 'Franchise Fee'. A lease agreement typically contains terms like 'Lessor', 'Lessee', 'monthly rental', 'premises'.
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
@@ -856,6 +862,22 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                 bo_check = is_beneficial_occupation_significant(bo, comm)
                                 exp["beneficial_occupation_flag"] = bo_check["flag"]
                                 exp["beneficial_occupation_days"] = bo_check["days_difference"]
+
+                        expiries = result.get("expiries", [])
+                        for i, exp in enumerate(expiries):
+                            if not exp.get("document") or \
+                               exp.get("document") in [
+                                   "Unknown", "unknown", 
+                                   "Document", ""]:
+                                # Recover filename by index
+                                if i < len(filename_map):
+                                    exp["document"] = \
+                                        filename_map[i]
+                                elif filename_map:
+                                    # Use first available
+                                    exp["document"] = \
+                                        list(filename_map.values())[i % 
+                                        len(filename_map)]
 
                         cache_data = {
                             "workspace_id": str(workspace_id),
