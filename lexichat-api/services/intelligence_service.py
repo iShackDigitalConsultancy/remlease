@@ -912,6 +912,42 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                     exp["doc_type"] = \
                                         "Lease Agreement"
 
+                        # Add placeholders for missing documents
+                        extracted_docs = set(
+                            exp.get("document", "") 
+                            for exp in expiries
+                        )
+                        
+                        for idx, fname in filename_map.items():
+                            if fname not in extracted_docs:
+                                # Determine doc_type from filename
+                                fname_lower = fname.lower()
+                                if any(x in fname_lower for x in [
+                                    "franchise", "_fa_", "_fa.", 
+                                    "fa_"
+                                ]):
+                                    placeholder_type = \
+                                        "Franchise Agreement"
+                                else:
+                                    placeholder_type = \
+                                        "Lease Agreement"
+                                
+                                expiries.append({
+                                    "document": fname,
+                                    "doc_type": placeholder_type,
+                                    "raw_commencement_date": None,
+                                    "expiry_date": None,
+                                    "renewal_type": None,
+                                    "clause_confidence": 0.0,
+                                    "action_required": 
+                                        "Document could not be "
+                                        "extracted — likely scanned "
+                                        "PDF or unsupported format. "
+                                        "Manual review required.",
+                                    "extraction_failed": True,
+                                    "days_until_expiry": None,
+                                    "renewal_window_status": None
+                                })
                         cache_data = {
                             "workspace_id": str(workspace_id),
                             "generated_at": datetime.utcnow().isoformat() + "Z",
