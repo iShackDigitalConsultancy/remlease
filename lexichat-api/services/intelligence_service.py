@@ -428,6 +428,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     '      "duration_years": 5,\n'
     '      "renewal_type": "manual_renewal",\n'
     '      "renewal_period_years": null,\n'
+    '      "ai_extracted_renewal_notice_latest": "YYYY-MM-DD or null",\n'
     '      "notice_min_months": 6,\n'
     '      "notice_max_months": 9,\n'
     '      "requires_notice": true,\n'
@@ -448,6 +449,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     '      "duration_years": 5,\n'
     '      "renewal_type": "manual_renewal",\n'
     '      "renewal_period_years": null,\n'
+    '      "ai_extracted_renewal_notice_latest": "YYYY-MM-DD or null",\n'
     '      "notice_min_months": 6,\n'
     '      "notice_max_months": 9,\n'
     '      "requires_notice": true,\n'
@@ -493,13 +495,13 @@ Do NOT calculate dates — extract raw values.
    a renewal option — it is a different 
    legal mechanism.
 
-2. notice_min_months: Integer. Extract from
-   'not less than X months' or 
-   'at least X months'. 
+2. notice_min_months: Integer.
+   - 'not less than 6 months' = notice_min_months: 6
+   - 'at least 6 months before expiry' = notice_min_months: 6
    If not stated set to null.
 
 3. notice_max_months: Integer or null.
-   Extract from 'not more than X months'.
+   - 'not more than 9 months' = notice_max_months: 9
    Many agreements have no upper bound —
    set to null if only minimum stated.
 
@@ -555,6 +557,9 @@ Do NOT calculate dates — extract raw values.
 
 12. duration_years: Integer. Extract from
     'period of X years' clause.
+
+13. ai_extracted_renewal_notice_latest: YYYY-MM-DD.
+    The AI-interpreted candidate notice deadline based on the extracted clause text. Do NOT calculate mathematically, extract what the clause suggests.
 
 All other date calculations will be 
 performed by the deterministic date engine.
@@ -786,6 +791,13 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                 exp["deterministic_renewal_date"] = ren_calc["date"]
                                 exp["renewal_date"] = ren_calc["date"]
                             
+                            # Legacy enum mapping
+                            r_type = exp.get("renewal_type", "")
+                            if r_type == "manual": exp["renewal_type"] = "manual_renewal"
+                            elif r_type == "automatic": exp["renewal_type"] = "automatic_renewal"
+                            elif r_type == "opt_out": exp["renewal_type"] = "automatic_renewal_with_opt_out"
+                            elif r_type == "none": exp["renewal_type"] = "no_renewal_right"
+
                             # Calculate renewal windows
                             min_m = exp.get("notice_min_months")
                             max_m = exp.get("notice_max_months")
@@ -838,6 +850,19 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                             )
                             if v_flags:
                                 exp["validation_flags"] = v_flags
+                            else:
+                                exp["validation_flags"] = []
+                                
+                            ai_latest = exp.get("ai_extracted_renewal_notice_latest")
+                            det_latest = exp.get("deterministic_renewal_notice_latest")
+                            if ai_latest and det_latest:
+                                try:
+                                    a_d = datetime.strptime(ai_latest, "%Y-%m-%d").date()
+                                    d_d = datetime.strptime(det_latest, "%Y-%m-%d").date()
+                                    if abs((a_d - d_d).days) > 7:
+                                        exp["validation_flags"].append("AI renewal notice deadline differs materially from deterministic calculation")
+                                except ValueError:
+                                    pass
 
                         expiries = result.get("expiries", [])
                         def is_valid_filename(val):
@@ -1381,9 +1406,9 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                     ws_summary["documents"].append({
                         "filename": doc_name,
                         "doc_type": doc_type,
-                        "commencement_date": exp.get("commencement_date"),
-                        "expiry_date": exp.get("expiry_date"),
-                        "renewal_deadline": exp.get("renewal_deadline"),
+                        "commencement_date": exp.get("legal_commencement_date") or exp.get("commencement_date") or exp.get("raw_commencement_date"),
+                        "expiry_date": exp.get("deterministic_expiry_date") or exp.get("expiry_date") or exp.get("raw_expiry_date"),
+                        "renewal_deadline": exp.get("deterministic_renewal_notice_latest") or exp.get("renewal_notice_latest") or exp.get("renewal_deadline"),
                         "renewal_option_period": exp.get("renewal_option_period"),
                         "action_required": exp.get("action_required"),
                         "renewal_type": exp.get("renewal_type"),
