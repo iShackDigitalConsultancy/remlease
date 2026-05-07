@@ -470,11 +470,20 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
 For each field, extract an array of candidates if multiple apply.
 
 EVIDENCE HIERARCHY ENGINE (Assign priority 1-5):
+
+For Dates (Commencement, Expiry, Occupation, Notice):
 Priority 1: Explicit expiry or commencement in schedule/annexure, or Fundamental Terms section.
 Priority 2: Defined terms section, specific lease period clause.
 Priority 3: Commencement + explicit duration calculation in text.
 Priority 4: Rental schedules/tables.
 Priority 5: Inferred operational text.
+
+For Renewal Type (candidate_renewal_types):
+Priority 1: Detailed operative renewal clause.
+Priority 2: Clause heading and clause body containing renewal mechanics.
+Priority 3: Schedule/annexure summary that includes full renewal mechanism.
+Priority 4: Vague schedule/annexure phrase like "renewal option".
+Priority 5: Inferred wording.
 
 CRITICAL INSTRUCTIONS:
 - Schedule/Fundamental Terms fields ("Beneficial Occupation Date", "Lease Period", "Commencement Date", "Expiry Date") OUTRANK rental tables.
@@ -583,10 +592,28 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                 expiries = result.get("expiries", [])
                                 # We expect 1 expiry per document but loop just in case
 
-                                def resolve_candidates(candidates):
+                                ALLOWED_RENEWAL_TYPES = {
+                                    "manual_renewal", "automatic_renewal", "automatic_renewal_with_opt_out", 
+                                    "tenant_option", "landlord_option", "mutual_option", "no_renewal_right", "unknown"
+                                }
+
+                                def resolve_candidates(field_key, candidates, v_flags):
                                     if not candidates: return None
                                     if not isinstance(candidates, list): return candidates
-                                    return sorted(candidates, key=lambda x: x.get("priority", 99))[0]
+                                    
+                                    sorted_cands = sorted(candidates, key=lambda x: x.get("priority", 99) if isinstance(x, dict) else 99)
+                                    
+                                    if field_key == "renewal_type":
+                                        for cand in sorted_cands:
+                                            if not isinstance(cand, dict): continue
+                                            if cand.get("value") in ALLOWED_RENEWAL_TYPES:
+                                                return cand
+                                            else:
+                                                if "Invalid renewal_type candidate ignored" not in v_flags:
+                                                    v_flags.append("Invalid renewal_type candidate ignored")
+                                        return {"value": "unknown", "priority": 99}
+                                        
+                                    return sorted_cands[0]
                                     
                                 for exp in expiries:
                                     exp["document_id"] = doc_info["id"]
@@ -609,7 +636,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                         elif key.endswith("s"): cand_key = f"candidate_{key}"
                                         else: cand_key = f"candidate_{key}s"
                                         candidates = exp.get(cand_key, [])
-                                        resolved = resolve_candidates(candidates)
+                                        resolved = resolve_candidates(key, candidates, v_flags)
                                         if resolved and isinstance(resolved, dict):
                                             exp[f"{key}_evidence"] = resolved
                                             exp[key] = resolved.get("value")
