@@ -379,10 +379,9 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
     if not payload.doc_ids:
         raise HTTPException(status_code=400, detail="No documents selected")
         
-    full_text: str = ""
-    filenames = []
-    filename_map = {}
+    documents_to_process = []
     workspace_id = None
+    
     for doc_id in payload.doc_ids:
         if current_user is not None:
             doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
@@ -399,9 +398,9 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
             raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
             
         if not workspace_id:
-            workspace_id = doc.workspace_id
+            workspace_id = str(doc.workspace_id)
             
-        filenames.append(doc.filename)
+        doc_text = None
         for candidate_id in [doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
             if not candidate_id: continue
             file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
@@ -409,59 +408,63 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
                 try:
                     with open(file_path, "r") as f:
                         doc_text = f.read()
-                    full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
-                    filename_map[len(filename_map)] = doc.filename
                     break
                 except Exception as e:
                     print(f"Failed to read {file_path}: {e}")
-                
-    if not full_text:
+                    
+        if doc_text:
+            documents_to_process.append({
+                "id": str(getattr(doc, "id", "")),
+                "pinecone_doc_id": str(getattr(doc, "pinecone_doc_id", "")),
+                "filename": str(doc.filename),
+                "text": doc_text
+            })
+
+    if not documents_to_process:
         raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
 
-    example_expiries = ",\n    ".join([
-    '{\n      "document": "' + fname + '",\n'
-    '      "doc_type": "Lease Agreement or Franchise Agreement",\n'
-    '      "legal_commencement_date": "YYYY-MM-DD or null",\n'
-    '      "rental_commencement_date": "YYYY-MM-DD or null",\n'
-    '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
-    '      "ai_extracted_expiry_date": "YYYY-MM-DD or null",\n'
-    '      "duration_years": 5,\n'
-    '      "renewal_type": "manual_renewal",\n'
-    '      "renewal_period_years": null,\n'
-    '      "ai_extracted_renewal_notice_latest": "YYYY-MM-DD or null",\n'
-    '      "notice_min_months": 6,\n'
-    '      "notice_max_months": 9,\n'
-    '      "requires_notice": true,\n'
-    '      "notice_party": "tenant",\n'
-    '      "renewal_action_required": true,\n'
-    '      "renewal_clause_text": "verbatim excerpt under 50 words",\n'
-    '      "clause_confidence": 0.95,\n'
-    '      "action_required": "specific action text"\n'
-    '    }'
-    for fname in filenames
-]) if filenames else (
-    '{\n      "document": "contract.pdf",\n'
-    '      "doc_type": "Lease Agreement or Franchise Agreement",\n'
-    '      "legal_commencement_date": "YYYY-MM-DD or null",\n'
-    '      "rental_commencement_date": "YYYY-MM-DD or null",\n'
-    '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
-    '      "ai_extracted_expiry_date": "YYYY-MM-DD or null",\n'
-    '      "duration_years": 5,\n'
-    '      "renewal_type": "manual_renewal",\n'
-    '      "renewal_period_years": null,\n'
-    '      "ai_extracted_renewal_notice_latest": "YYYY-MM-DD or null",\n'
-    '      "notice_min_months": 6,\n'
-    '      "notice_max_months": 9,\n'
-    '      "requires_notice": true,\n'
-    '      "notice_party": "tenant",\n'
-    '      "renewal_action_required": true,\n'
-    '      "renewal_clause_text": "verbatim excerpt under 50 words",\n'
-    '      "clause_confidence": 0.95,\n'
-    '      "action_required": "specific action text"\n'
-    '    }'
-)
+    async def pipeline_wrapper():
+        from datetime import datetime
+        from services.date_engine import (
+            calculate_expiry,
+            calculate_renewal_window,
+            check_renewal_window_status,
+            is_beneficial_occupation_significant,
+            validate_dates,
+            calculate_renewal_date
+        )
+        
+        final_expiries = []
+        final_context = None
+        
+        for doc_info in documents_to_process:
+            fname = doc_info["filename"]
+            doc_text = doc_info["text"]
+            full_text = f"\n--- DOCUMENT START: {fname} ---\n{doc_text}\n"
+            
+            example_expiries = (
+                '{\n      "document": "' + fname + '",\n'
+                '      "doc_type": "Lease Agreement or Franchise Agreement",\n'
+                '      "legal_commencement_date": "YYYY-MM-DD or null",\n'
+                '      "rental_commencement_date": "YYYY-MM-DD or null",\n'
+                '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
+                '      "ai_extracted_expiry_date": "YYYY-MM-DD or null",\n'
+                '      "duration_years": 5,\n'
+                '      "renewal_type": "manual_renewal",\n'
+                '      "renewal_period_years": null,\n'
+                '      "ai_extracted_renewal_notice_latest": "YYYY-MM-DD or null",\n'
+                '      "notice_min_months": 6,\n'
+                '      "notice_max_months": 9,\n'
+                '      "requires_notice": true,\n'
+                '      "notice_party": "tenant",\n'
+                '      "renewal_action_required": true,\n'
+                '      "renewal_clause_text": "verbatim excerpt under 50 words",\n'
+                '      "clause_confidence": 0.95,\n'
+                '      "action_required": "specific action text"\n'
+                '    }'
+            )
 
-    map_task = """Extract all dates, deadlines, and timeframes from this section. You MUST extract ALL of these specific fields if present:
+            map_task = """Extract all dates, deadlines, and timeframes from this section. You MUST extract ALL of these specific fields if present:
 1. legal_commencement_date — when the lease legally begins.
 2. beneficial_occupation_date — when tenant gets early access.
 3. rental_commencement_date — when rent starts being paid.
@@ -561,16 +564,21 @@ Do NOT calculate dates — extract raw values.
 13. ai_extracted_renewal_notice_latest: YYYY-MM-DD.
     The AI-interpreted candidate notice deadline based on the extracted clause text. Do NOT calculate mathematically, extract what the clause suggests.
 
+CRITICAL ANTI-CONTAMINATION RULE:
+You are processing ONLY this document. Do not infer, borrow, compare, or import dates, clauses, names, or renewal terms from any other document.
+
 All other date calculations will be 
 performed by the deterministic date engine.
 Do NOT calculate renewal deadlines.
 Do NOT calculate expiry from commencement.
 Extract raw values only."""
-    reduce_task = f"""You MUST produce a SEPARATE expiry entry for EACH document marked with --- DOCUMENT START ---.
-CRITICAL: The 'document' field in each expiry entry MUST be copied EXACTLY from the --- DOCUMENT START: filename.pdf --- marker in the input text.
+
+            reduce_task = f"""You MUST produce a SEPARATE expiry entry for THIS document marked with --- DOCUMENT START ---.
+CRITICAL ANTI-CONTAMINATION RULE:
+You are processing ONLY this document. Do not infer, borrow, compare, or import dates, clauses, names, or renewal terms from any other document.
+
+CRITICAL: The 'document' field in the expiry entry MUST be exactly: '{fname}'
 Do NOT write 'Unknown', 'Document 1', or any invented name.
-If you cannot find the filename, copy the entire marker text between 'DOCUMENT START:' and '---'.
-Example: if input contains '--- DOCUMENT START: N1 Lease.pdf ---' then document must be exactly: 'N1 Lease.pdf'
 For each document entry you MUST populate:
 - doc_type: Must be exactly one of: 'Lease Agreement' or 'Franchise Agreement'. Determine from the document content and filename. A franchise agreement typically contains terms like 'Franchisor', 'Franchisee', 'Franchise Fee'. A lease agreement typically contains terms like 'Lessor', 'Lessee', 'monthly rental', 'premises'.
 Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
@@ -597,9 +605,12 @@ Output ONLY valid JSON matching this exact structure:
 }}
 If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Return ONLY the JSON object."""
 
-    def legacy_op():
-        old_full_text = str(full_text)[:18000]
-        prompt = f"""You are a senior legal analyst extracting crucial dates from multiple contracts to trigger calendar/SmartBuilding events.
+            def create_legacy_op(t):
+                def legacy_op():
+                    old_full_text = str(t)[:18000]
+                    prompt = f"""You are a senior legal analyst extracting crucial dates from multiple contracts to trigger calendar/SmartBuilding events.
+CRITICAL ANTI-CONTAMINATION RULE:
+You are processing ONLY this document. Do not infer, borrow, compare, or import dates, clauses, names, or renewal terms from any other document.
 
 DOCUMENTS TEXT:
 {old_full_text}
@@ -628,721 +639,256 @@ Output ONLY valid JSON matching this exact structure:
 }}
 
 If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Perform strict date arithmetic if the contract specifies a start date and term duration. Return ONLY the JSON object."""
-        resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
-            messages=[{'role': 'user', 'content': prompt}],
-            temperature=0.0,
-            max_tokens=2000
-        )
-        raw = resp.choices[0].message.content.strip()
-        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
-        return json.loads(raw)
+                    resp = groq_client.chat.completions.create(
+                        model='llama-3.3-70b-versatile',
+                        messages=[{'role': 'user', 'content': prompt}],
+                        temperature=0.0,
+                        max_tokens=2000
+                    )
+                    raw = resp.choices[0].message.content.strip()
+                    raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
+                    return json.loads(raw)
+                return legacy_op
 
-    from datetime import datetime
-
-    async def pipeline_wrapper():
-        from datetime import datetime
-        from services.date_engine import (
-            calculate_expiry,
-            calculate_renewal_window,
-            check_renewal_window_status,
-            is_beneficial_occupation_significant
-        )
-        async for chunk in run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op):
-            if chunk.startswith("data: "):
-                try:
-                    data_obj = json.loads(chunk[6:])
-                    if data_obj.get("status") == "complete":
-                        result = data_obj.get("data", {})
-                        
-                        # Cross-reference fundamental_terms cache
-                        # to fill DocuSign form field gaps
-                        ft_cache_path = os.path.join(
-                            UPLOAD_DIR,
-                            f"{workspace_id}_fundamental_terms.json"
-                        )
-                        if os.path.exists(ft_cache_path):
-                            try:
-                                with open(ft_cache_path, "r") as f:
-                                    ft_cache = json.load(f)
-                                ft_items = ft_cache.get(
-                                    "fundamental_terms", [])
-                                if isinstance(ft_items, dict):
-                                    ft_items = [ft_items]
+            try:
+                doc_complete = False
+                async for chunk in run_feature_gated_pipeline(full_text, map_task, reduce_task, create_legacy_op(full_text)):
+                    if chunk.startswith("data: "):
+                        try:
+                            data_obj = json.loads(chunk[6:])
+                            if data_obj.get("status") == "complete":
+                                result = data_obj.get("data", {})
+                                doc_complete = True
                                 
-                                for exp in result.get("expiries", []):
-                                    if exp.get("legal_commencement_date"):
-                                        continue  # already have it
+                                # Set context if not already set
+                                if not final_context and result.get("document_context"):
+                                    final_context = result.get("document_context")
                                     
-                                    doc_type = exp.get("doc_type","")
-                                    if "Franchise" not in doc_type:
-                                        continue
+                                expiries = result.get("expiries", [])
+                                # We expect 1 expiry per document but loop just in case
+                                for exp in expiries:
+                                    exp["document_id"] = doc_info["id"]
+                                    exp["pinecone_doc_id"] = doc_info["pinecone_doc_id"]
+                                    exp["workspace_id"] = workspace_id
+                                    
+                                    if exp.get("document") != fname:
+                                        exp["document"] = fname
+                                        v_flags = exp.get("validation_flags", [])
+                                        if "Filename hallucination corrected" not in v_flags:
+                                            v_flags.append("Filename hallucination corrected")
+                                        exp["validation_flags"] = v_flags
                                         
-                                    # Find matching franchise entry
-                                    # in fundamental_terms cache
-                                    for ft in ft_items:
-                                        if "Franchise" not in str(
-                                            ft.get("doc_type","")):
-                                            continue
-                                        
-                                        ft_comm = ft.get(
-                                            "commencement_date") or \
-                                            ft.get("franchise_terms",
-                                            {}).get("commencement_date")
-                                        ft_duration = None
-                                        ft_expiry = ft.get(
-                                            "expiry_date") or \
-                                            ft.get("franchise_terms",
-                                            {}).get("expiry_date")
-                                        
-                                        if ft_comm:
-                                            exp["legal_commencement_date"]\
-                                                = ft_comm
-                                            exp["commencement_source"] \
-                                                = "fundamental_terms_cache"
+                                    # Post-processing date deterministic engine
+                                    
+                                    # Cache check (Fundamental terms)
+                                    ft_cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_fundamental_terms.json")
+                                    if os.path.exists(ft_cache_path):
+                                        try:
+                                            with open(ft_cache_path, "r") as f:
+                                                ft_cache = json.load(f)
+                                            ft_items = ft_cache.get("fundamental_terms", [])
+                                            if isinstance(ft_items, dict):
+                                                ft_items = [ft_items]
                                             
-                                            # Recalculate expiry if 
-                                            # we now have commencement
-                                            # Try to get duration from
-                                            # ft or calculate from expiry
-                                            if ft_expiry and ft_comm:
-                                                try:
-                                                    from datetime import\
-                                                        datetime
-                                                    c = datetime.strptime(
-                                                        ft_comm,
-                                                        "%Y-%m-%d")
-                                                    e = datetime.strptime(
-                                                        ft_expiry,
-                                                        "%Y-%m-%d")
-                                                    years = (
-                                                        e.year - c.year)
-                                                    exp["duration_years"]\
-                                                        = years
-                                                except Exception:
-                                                    pass
+                                            if not exp.get("legal_commencement_date"):
+                                                doc_type = exp.get("doc_type","")
+                                                if "Franchise" in doc_type:
+                                                    for ft in ft_items:
+                                                        if "Franchise" in str(ft.get("doc_type","")):
+                                                            ft_comm = ft.get("commencement_date") or ft.get("franchise_terms", {}).get("commencement_date")
+                                                            ft_expiry = ft.get("expiry_date") or ft.get("franchise_terms", {}).get("expiry_date")
+                                                            if ft_comm:
+                                                                exp["legal_commencement_date"] = ft_comm
+                                                                exp["commencement_source"] = "fundamental_terms_cache"
+                                                                if ft_expiry and ft_comm:
+                                                                    try:
+                                                                        c = datetime.strptime(ft_comm, "%Y-%m-%d")
+                                                                        e = datetime.strptime(ft_expiry, "%Y-%m-%d")
+                                                                        exp["duration_years"] = (e.year - c.year)
+                                                                    except Exception:
+                                                                        pass
+                                                                break
+                                        except Exception:
+                                            pass
                                             
-                                            # Recalculate expiry
-                                            if exp.get(
-                                                "legal_commencement_date")\
-                                                and exp.get(
-                                                "duration_years"):
-                                                from services.date_engine\
-                                                    import calculate_expiry
-                                                calc = calculate_expiry(
-                                                    exp[
-                                                    "legal_commencement_date"
-                                                    ],
-                                                    exp["duration_years"],
-                                                    "day_before"
-                                                )
-                                                exp["calculated_expiry_date"]\
-                                                    = calc["date"]
-                                                exp["expiry_date"] = \
-                                                    calc["date"]
-                                                exp[
-                                                "expiry_calculation_basis"
-                                                ] = calc["basis"] + \
-                                                    " (commencement from" \
-                                                    " fundamental_terms" \
-                                                    " cache)"
-                                            break
-                            except Exception as e:
-                                print(f"Cache cross-ref error: {e}")
-                                
-                        from services.date_engine import validate_dates, calculate_renewal_date
-                        for exp in result.get("expiries", []):
-                            # AI Extractions
-                            ai_expiry = exp.get("ai_extracted_expiry_date")
-                            legal_comm = exp.get("legal_commencement_date")
-                            rental_comm = exp.get("rental_commencement_date")
-                            bo_comm = exp.get("beneficial_occupation_date")
-                            
-                            # Deterministic Expiry Calculation
-                            if legal_comm and exp.get("duration_years"):
-                                calc = calculate_expiry(
-                                    legal_comm,
-                                    exp["duration_years"],
-                                    "day_before"
-                                )
-                                exp["deterministic_expiry_date"] = calc["date"]
-                                exp["expiry_calculation_basis"] = calc["basis"]
-                                
-                                if ai_expiry and calc["date"] and ai_expiry != calc["date"]:
-                                    try:
-                                        raw_d = datetime.strptime(ai_expiry, "%Y-%m-%d").date()
-                                        calc_d = datetime.strptime(calc["date"], "%Y-%m-%d").date()
-                                        diff = abs((raw_d - calc_d).days)
-                                        if diff > 1:
-                                            exp["expiry_date_mismatch"] = True
-                                            exp["expiry_date_mismatch_days"] = diff
-                                    except ValueError:
-                                        pass
-                                
-                                exp["expiry_date"] = exp.get("deterministic_expiry_date")
+                                    ai_expiry = exp.get("ai_extracted_expiry_date")
+                                    legal_comm = exp.get("legal_commencement_date")
+                                    rental_comm = exp.get("rental_commencement_date")
+                                    bo_comm = exp.get("beneficial_occupation_date")
+                                    
+                                    if legal_comm and exp.get("duration_years"):
+                                        calc = calculate_expiry(legal_comm, exp.get("duration_years"), "day_before")
+                                        exp["deterministic_expiry_date"] = calc["date"]
+                                        exp["expiry_calculation_basis"] = calc["basis"] + (" (commencement from fundamental_terms cache)" if exp.get("commencement_source") == "fundamental_terms_cache" else "")
+                                        exp["expiry_date"] = exp["deterministic_expiry_date"]
+                                    else:
+                                        exp["expiry_date"] = ai_expiry
+                                        
+                                    expiry = exp.get("expiry_date")
+                                    
+                                    if expiry:
+                                        ren_calc = calculate_renewal_date(expiry)
+                                        exp["deterministic_renewal_date"] = ren_calc["date"]
+                                        exp["renewal_date"] = ren_calc["date"]
+                                        
+                                    r_type = exp.get("renewal_type", "")
+                                    if r_type == "manual": exp["renewal_type"] = "manual_renewal"
+                                    elif r_type == "automatic": exp["renewal_type"] = "automatic_renewal"
+                                    elif r_type == "opt_out": exp["renewal_type"] = "automatic_renewal_with_opt_out"
+                                    elif r_type == "none": exp["renewal_type"] = "no_renewal_right"
+                                    
+                                    min_m = exp.get("notice_min_months")
+                                    max_m = exp.get("notice_max_months")
+                                    if expiry and min_m:
+                                        window = calculate_renewal_window(expiry, min_m, max_m or min_m)
+                                        exp["deterministic_renewal_notice_earliest"] = window["renewal_notice_earliest"]
+                                        exp["deterministic_renewal_notice_latest"] = window["renewal_notice_latest"]
+                                        exp["renewal_notice_earliest"] = window["renewal_notice_earliest"]
+                                        exp["renewal_notice_latest"] = window["renewal_notice_latest"]
+                                        exp["renewal_window_basis"] = window["basis"]
+                                        
+                                        status = check_renewal_window_status(expiry, min_m, max_m or min_m)
+                                        exp["renewal_window_status"] = status["status"]
+                                        exp["renewal_urgency"] = status["urgency"]
+                                        exp["days_until_expiry"] = status["days_until_expiry"]
+                                        
+                                    if expiry and not exp.get("days_until_expiry"):
+                                        from services.date_engine import days_between
+                                        from datetime import date
+                                        today = date.today().isoformat()
+                                        db_result = days_between(today, expiry)
+                                        if db_result.get("days") is not None:
+                                            exp["days_until_expiry"] = db_result["days"]
+                                            
+                                    if bo_comm and legal_comm:
+                                        bo_check = is_beneficial_occupation_significant(bo_comm, legal_comm)
+                                        exp["beneficial_occupation_flag"] = bo_check["flag"]
+                                        exp["beneficial_occupation_days"] = bo_check["days_difference"]
+                                        
+                                    v_flags = exp.get("validation_flags", [])
+                                    engine_flags = validate_dates(
+                                        legal_commencement=legal_comm,
+                                        rental_commencement=rental_comm,
+                                        beneficial_occupation=bo_comm,
+                                        expiry=expiry,
+                                        renewal_latest=exp.get("deterministic_renewal_notice_latest")
+                                    )
+                                    if engine_flags:
+                                        v_flags.extend(engine_flags)
+                                        
+                                    ai_latest = exp.get("ai_extracted_renewal_notice_latest")
+                                    det_latest = exp.get("deterministic_renewal_notice_latest")
+                                    if ai_latest and det_latest:
+                                        try:
+                                            a_d = datetime.strptime(ai_latest, "%Y-%m-%d").date()
+                                            d_d = datetime.strptime(det_latest, "%Y-%m-%d").date()
+                                            if abs((a_d - d_d).days) > 7:
+                                                v_flags.append("AI renewal notice deadline differs materially from deterministic calculation")
+                                        except ValueError:
+                                            pass
+                                            
+                                    exp["validation_flags"] = v_flags
+                                    
+                                    dt = exp.get("doc_type", "")
+                                    if len(str(dt)) > 30 or dt not in ["Lease Agreement", "Franchise Agreement", "Sale Agreement", "Non-Disclosure Agreement"]:
+                                        exp["doc_type"] = "Lease Agreement"
+                                        
+                                    final_expiries.append(exp)
                             else:
-                                exp["expiry_date"] = ai_expiry
-                            
-                            expiry = exp.get("expiry_date")
-                            
-                            # Calculate renewal date
-                            if expiry:
-                                ren_calc = calculate_renewal_date(expiry)
-                                exp["deterministic_renewal_date"] = ren_calc["date"]
-                                exp["renewal_date"] = ren_calc["date"]
-                            
-                            # Legacy enum mapping
-                            r_type = exp.get("renewal_type", "")
-                            if r_type == "manual": exp["renewal_type"] = "manual_renewal"
-                            elif r_type == "automatic": exp["renewal_type"] = "automatic_renewal"
-                            elif r_type == "opt_out": exp["renewal_type"] = "automatic_renewal_with_opt_out"
-                            elif r_type == "none": exp["renewal_type"] = "no_renewal_right"
+                                msg = data_obj.get("message", "")
+                                yield f"data: {json.dumps({'status': 'processing', 'message': f'[{fname}] {msg}'})}\n\n"
+                        except Exception:
+                            pass
+                if not doc_complete:
+                    raise Exception("Document extraction failed to yield a complete result")
+            except Exception as e:
+                print(f"Extraction failed for {fname}: {e}")
+                final_expiries.append({
+                    "document_id": doc_info["id"],
+                    "pinecone_doc_id": doc_info["pinecone_doc_id"],
+                    "workspace_id": workspace_id,
+                    "document": fname,
+                    "doc_type": "Unknown",
+                    "extraction_failed": True,
+                    "clause_confidence": 0.0,
+                    "action_required": "Document extraction failed — manual review required",
+                    "validation_flags": ["Document extraction failed — manual review required"]
+                })
+                
+        # Consolidate all results
+        from services.risk_engine import calculate_workspace_risk_scores
+        
+        ws_summary_docs = []
+        for exp in final_expiries:
+            ws_summary_docs.append({
+                "filename": exp.get("document"),
+                "doc_type": exp.get("doc_type"),
+                "commencement_date": exp.get("legal_commencement_date") or exp.get("commencement_date") or exp.get("raw_commencement_date"),
+                "expiry_date": exp.get("deterministic_expiry_date") or exp.get("expiry_date") or exp.get("raw_expiry_date"),
+                "renewal_deadline": exp.get("deterministic_renewal_notice_latest") or exp.get("renewal_notice_latest") or exp.get("renewal_deadline"),
+                "renewal_option_period": exp.get("renewal_period_years") or exp.get("renewal_option_period"),
+                "action_required": exp.get("action_required"),
+                "renewal_type": exp.get("renewal_type"),
+                "renewal_window_status": exp.get("renewal_window_status"),
+                "renewal_urgency": exp.get("renewal_urgency"),
+                "days_until_expiry": exp.get("days_until_expiry"),
+                "renewal_notice_earliest": exp.get("deterministic_renewal_notice_earliest") or exp.get("renewal_notice_earliest"),
+                "renewal_notice_latest": exp.get("deterministic_renewal_notice_latest") or exp.get("renewal_notice_latest"),
+                "notice_min_months": exp.get("notice_min_months"),
+                "notice_max_months": exp.get("notice_max_months")
+            })
 
-                            # Calculate renewal windows
-                            min_m = exp.get("notice_min_months")
-                            max_m = exp.get("notice_max_months")
-                            
-                            if expiry and min_m:
-                                window = calculate_renewal_window(
-                                    expiry, 
-                                    min_m, 
-                                    max_m or min_m
-                                )
-                                exp["deterministic_renewal_notice_earliest"] = window["renewal_notice_earliest"]
-                                exp["deterministic_renewal_notice_latest"] = window["renewal_notice_latest"]
-                                
-                                # Backwards compatibility for UI
-                                exp["renewal_notice_earliest"] = window["renewal_notice_earliest"]
-                                exp["renewal_notice_latest"] = window["renewal_notice_latest"]
-                                exp["renewal_window_basis"] = window["basis"]
-                                
-                                # Check current window status
-                                status = check_renewal_window_status(
-                                    expiry,
-                                    min_m,
-                                    max_m or min_m
-                                )
-                                exp["renewal_window_status"] = status["status"]
-                                exp["renewal_urgency"] = status["urgency"]
-                                exp["days_until_expiry"] = status["days_until_expiry"]
-                            
-                            if expiry and not exp.get("days_until_expiry"):
-                                from services.date_engine import days_between
-                                from datetime import date
-                                today = date.today().isoformat()
-                                db_result = days_between(today, expiry)
-                                if db_result.get("days") is not None:
-                                    exp["days_until_expiry"] = db_result["days"]
-                            
-                            # Check beneficial occupation
-                            if bo_comm and legal_comm:
-                                bo_check = is_beneficial_occupation_significant(bo_comm, legal_comm)
-                                exp["beneficial_occupation_flag"] = bo_check["flag"]
-                                exp["beneficial_occupation_days"] = bo_check["days_difference"]
-                                
-                            # Full Deterministic Validation
-                            v_flags = validate_dates(
-                                legal_commencement=legal_comm,
-                                rental_commencement=rental_comm,
-                                beneficial_occupation=bo_comm,
-                                expiry=expiry,
-                                renewal_latest=exp.get("deterministic_renewal_notice_latest")
-                            )
-                            if v_flags:
-                                exp["validation_flags"] = v_flags
-                            else:
-                                exp["validation_flags"] = []
-                                
-                            ai_latest = exp.get("ai_extracted_renewal_notice_latest")
-                            det_latest = exp.get("deterministic_renewal_notice_latest")
-                            if ai_latest and det_latest:
-                                try:
-                                    a_d = datetime.strptime(ai_latest, "%Y-%m-%d").date()
-                                    d_d = datetime.strptime(det_latest, "%Y-%m-%d").date()
-                                    if abs((a_d - d_d).days) > 7:
-                                        exp["validation_flags"].append("AI renewal notice deadline differs materially from deterministic calculation")
-                                except ValueError:
-                                    pass
+        def detect_renewal_mismatch(docs: list) -> dict:
+            if not docs: return {"status": "ok"}
+            lease = next((d for d in docs if d.get("doc_type") == "Lease Agreement"), None)
+            franchise = next((d for d in docs if d.get("doc_type") == "Franchise Agreement"), None)
+            if not lease or not franchise: return {"status": "ok"}
+            
+            rules_triggered = []
+            mismatch_detected = False
+            
+            l_type = lease.get("renewal_type")
+            f_type = franchise.get("renewal_type")
+            if l_type == "no_renewal_right" and f_type != "no_renewal_right":
+                mismatch_detected = True
+                rules_triggered.append("Franchise has renewal option but Lease has no renewal right")
+            
+            l_dl = lease.get("renewal_notice_latest")
+            f_dl = franchise.get("renewal_notice_latest")
+            if l_dl and f_dl:
+                try:
+                    ld = datetime.strptime(l_dl, "%Y-%m-%d")
+                    fd = datetime.strptime(f_dl, "%Y-%m-%d")
+                    if fd < ld:
+                        mismatch_detected = True
+                        rules_triggered.append(f"Franchise renewal deadline ({f_dl}) is BEFORE Lease deadline ({l_dl})")
+                except:
+                    pass
+                    
+            if mismatch_detected:
+                return {"status": "mismatch", "rules_triggered": rules_triggered}
+            return {"status": "ok"}
 
-                        expiries = result.get("expiries", [])
-                        def is_valid_filename(val):
-                            if not val:
-                                return False
-                            extensions = (
-                                '.pdf', '.docx', '.doc', 
-                                '.xlsx', '.txt', '.md'
-                            )
-                            val_str = str(val).strip()
-                            if len(val_str) > 200:
-                                return False
-                            if not any(val_str.lower().endswith(ext)
-                                       for ext in extensions):
-                                return False
-                            return True
-
-                        for i, exp in enumerate(expiries):
-                            if not is_valid_filename(
-                                exp.get("document")):
-                                # Recover from filename_map
-                                if i < len(filename_map):
-                                    exp["document"] = \
-                                        filename_map[i]
-                                elif filename_map:
-                                    exp["document"] = \
-                                        list(filename_map.values())[
-                                            i % len(filename_map)]
-
-                        for exp in expiries:
-                            dt = exp.get("doc_type", "")
-                            if len(str(dt)) > 30 or dt not in [
-                                "Lease Agreement",
-                                "Franchise Agreement",
-                                "Sale Agreement",
-                                "Other"
-                            ]:
-                                # Infer from filename
-                                fname = str(
-                                    exp.get("document","")).lower()
-                                if any(x in fname for x in [
-                                    "franchise", "_fa_", "_fa.", 
-                                    "fa_"
-                                ]):
-                                    exp["doc_type"] = \
-                                        "Franchise Agreement"
-                                else:
-                                    exp["doc_type"] = \
-                                        "Lease Agreement"
-
-                        # Add placeholders for missing documents
-                        extracted_docs = set(
-                            exp.get("document", "") 
-                            for exp in expiries
-                        )
-                        
-                        for idx, fname in filename_map.items():
-                            if fname not in extracted_docs:
-                                # Determine doc_type from filename
-                                fname_lower = fname.lower()
-                                if any(x in fname_lower for x in [
-                                    "franchise", "_fa_", "_fa.", 
-                                    "fa_"
-                                ]):
-                                    placeholder_type = \
-                                        "Franchise Agreement"
-                                else:
-                                    placeholder_type = \
-                                        "Lease Agreement"
-                                
-                                expiries.append({
-                                    "document": fname,
-                                    "doc_type": placeholder_type,
-                                    "legal_commencement_date": None,
-                                    "expiry_date": None,
-                                    "renewal_type": None,
-                                    "clause_confidence": 0.0,
-                                    "action_required": 
-                                        "Document could not be "
-                                        "extracted — likely scanned "
-                                        "PDF or unsupported format. "
-                                        "Manual review required.",
-                                    "extraction_failed": True,
-                                    "days_until_expiry": None,
-                                    "renewal_window_status": None
-                                })
-                        cache_data = {
-                            "workspace_id": str(workspace_id),
-                            "generated_at": datetime.utcnow().isoformat() + "Z",
-                            "document_context": result.get("document_context", {}),
-                            "expiries": result.get("expiries", [])
-                        }
-                        data_obj["data"] = cache_data
-                        yield f"data: {json.dumps(data_obj)}\n\n"
-                        continue
-                except Exception as e:
-                    print(f"Post-processing error: {e}")
-            yield chunk
+        mismatch = detect_renewal_mismatch(ws_summary_docs)
+        risk_scores = calculate_workspace_risk_scores(ws_summary_docs, mismatch)
+        
+        final_data = {
+            "workspace_id": workspace_id,
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "document_context": final_context or {},
+            "expiries": final_expiries,
+            "rules_triggered": mismatch.get("rules_triggered", []),
+            "renewal_mismatch": mismatch,
+            "risk_scores": risk_scores,
+            "overall_risk_score": risk_scores.get("overall_risk_score"),
+            "overall_severity": risk_scores.get("overall_severity"),
+            "earliest_deadline": min((e.get("renewal_deadline") for e in ws_summary_docs if e.get("renewal_deadline") and e.get("renewal_deadline") not in ["null", None, ""]), default=None)
+        }
+        
+        yield f"data: {json.dumps({'status': 'complete', 'data': final_data})}\n\n"
 
     cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, pipeline_wrapper()), media_type="text/event-stream")
-
-
-async def gap_analysis(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
-    if len(payload.doc_ids) < 2:
-        raise HTTPException(status_code=400, detail="At least two documents required to run a gap analysis.")
-        
-    full_text: str = ""
-    filenames = []
-    workspace_id = None
-    for doc_id in payload.doc_ids:
-        if current_user is not None:
-            doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
-                (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
-                models.Workspace.firm_id == current_user.firm_id
-            ).first()
-        else:
-            doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
-                (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
-                models.Workspace.session_id == x_session_id
-            ).first()
-            
-        if not doc:
-            raise HTTPException(status_code=403, detail=f"Access denied for document {doc_id}")
-            
-        if not workspace_id:
-            workspace_id = doc.workspace_id
-            
-        filenames.append(doc.filename)
-        for candidate_id in [doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
-            if not candidate_id: continue
-            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
-            if os.path.exists(file_path):
-                try:
-                    with open(file_path, "r") as f:
-                        doc_text = f.read()
-                    full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
-                    break
-                except Exception as e:
-                    print(f"Failed to read {file_path}: {e}")
-                
-    if not full_text:
-        raise HTTPException(status_code=404, detail="No text could be extracted from selected documents.")
-
-    lease_filename = "Lease_Document"
-    franchise_filename = "Franchise_Document"
-    for fname in filenames:
-        fname_lower = fname.lower()
-        if any(word in fname_lower for word in ["lease", "huur", "agreement of lease"]):
-            lease_filename = fname
-        elif any(word in fname_lower for word in ["franchise", "fa ", "franchisor"]):
-            franchise_filename = fname
-
-    map_task = "Extract all obligations, restrictions, and operational requirements from this section. Also extract: Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building., all party names and roles, and obligations per party."
-    reduce_task = f"""Cross-reference franchise obligations against lease provisions and list every misalignment found. Flag uncertain matches explicitly. Detect which document is the lease and which is the franchise agreement based on content, not just filename order.
-Output exactly this JSON structure:
-{{
-  "detected_lease": "{lease_filename}",
-  "detected_franchise": "{franchise_filename}",
-  "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
-  "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
-  "document_context": {{
-    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
-      {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
-      }}
-    ]
-  }},
-  "gaps": [
-    {{
-      "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
-      "franchise_requirement": "What does the franchise demand?",
-      "lease_provision": "What does the lease actually say?",
-      "status": "RISK | MATCH | WARNING",
-      "clause_reference_lease": "e.g. 4.2",
-      "clause_reference_franchise": "e.g. 5.1"
-    }}
-  ]
-}}
-
-If only one document type is uploaded, map whatever you can and put 'null' for the missing one. Return ONLY valid JSON."""
-
-    def legacy_op():
-        old_full_text = str(full_text)[:24000]
-        prompt = f"""You are a master commercial real estate and franchise attorney.
-The user has uploaded multiple documents. Your job is to automatically detect which is the Franchise Agreement and which is the Lease Agreement. Then, cross-reference them to find gaps, conflicts, and risks. 
-Provide key terms and a critical mismatch report.
-
-DOCUMENTS TEXT:
-{old_full_text}
-
-INSTRUCTIONS:
-Output exactly this JSON structure:
-{{
-  "detected_lease": "{lease_filename}",
-  "detected_franchise": "{franchise_filename}",
-  "lease_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
-  "franchise_key_terms": {{ "term": "...", "expiry": "...", "permitted_use": "..." }},
-  "document_context": {{
-    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
-      {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
-      }}
-    ]
-  }},
-  "gaps": [
-    {{
-      "category": "Term Alignment | Permitted Use | Signage/Aesthetics | Contingencies / Exit",
-      "franchise_requirement": "What does the franchise demand?",
-      "lease_provision": "What does the lease actually say?",
-      "status": "RISK | MATCH | WARNING",
-      "clause_reference_lease": "e.g. 4.2",
-      "clause_reference_franchise": "e.g. 5.1"
-    }}
-  ]
-}}
-
-If only one document type is uploaded, map whatever you can and put 'null' for the missing one.
-Return ONLY valid JSON."""
-        resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
-            messages=[{'role': 'user', 'content': prompt}],
-            temperature=0.0,
-            max_tokens=3000
-        )
-        raw = resp.choices[0].message.content.strip()
-        raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
-        return json.loads(raw)
-
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_gap_analysis.json")
-    return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
-
-def detect_renewal_mismatch(
-    expiries: list
-) -> dict:
-    """
-    Detects renewal mismatches between
-    lease and franchise agreements at 
-    the same site.
-    Returns mismatch summary dict.
-    """
-    null_values = {
-        None, "null", "None", "",
-        "None — no renewal option",
-        "not specified", "Not specified",
-        "N/A", "n/a"
-    }
-    
-    lease_docs = [
-        e for e in expiries
-        if e.get("doc_type") == 
-        "Lease Agreement"
-    ]
-    franchise_docs = [
-        e for e in expiries
-        if e.get("doc_type") == 
-        "Franchise Agreement"
-    ]
-    
-    result = {
-        "has_mismatch": False,
-        "mismatch_type": None,
-        "severity": None,
-        "description": None,
-        "lease_can_renew": None,
-        "franchise_can_renew": None,
-        "rules_triggered": []
-    }
-    
-    if not lease_docs or not franchise_docs:
-        return result
-    
-    lease = lease_docs[0]
-    franchise = franchise_docs[0]
-    
-    lease_renewal_type = lease.get(
-        "renewal_type", "none")
-    franchise_renewal_type = franchise.get(
-        "renewal_type", "none")
-
-    lease_can_renew = lease_renewal_type \
-        not in ["none", None, "null", ""]
-    franchise_can_renew = franchise_renewal_type\
-        not in ["none", None, "null", ""]
-
-    if lease_renewal_type is None:
-        lease_renewal = lease.get(
-            "renewal_option_period")
-        lease_can_renew = (
-            lease_renewal not in null_values)
-
-    if franchise_renewal_type is None:
-        franchise_renewal = franchise.get(
-            "renewal_option_period")
-        franchise_can_renew = (
-            franchise_renewal not in null_values)
-    
-    result["lease_can_renew"] = lease_can_renew
-    result["franchise_can_renew"] = \
-        franchise_can_renew
-    
-    if franchise_can_renew and \
-       not lease_can_renew:
-        result.update({
-            "has_mismatch": True,
-            "mismatch_type": 
-                "franchise_renewal_unprotected",
-            "severity": "Critical",
-            "description": 
-                "Franchise has renewal option "
-                "but lease has no renewal right. "
-                "Franchisee cannot exercise "
-                "franchise renewal without "
-                "securing a new lease."
-        })
-    elif lease_can_renew and \
-         not franchise_can_renew:
-        result.update({
-            "has_mismatch": True,
-            "mismatch_type":
-                "lease_renewal_unprotected",
-            "severity": "High", 
-            "description":
-                "Lease has renewal option but "
-                "franchise has no renewal right. "
-                "Location can continue but "
-                "franchise brand cannot."
-        })
-    elif not lease_can_renew and \
-         not franchise_can_renew:
-        result.update({
-            "has_mismatch": False,
-            "mismatch_type": "no_renewal",
-            "severity": "High",
-            "description":
-                "Neither lease nor franchise "
-                "has a renewal option. "
-                "Both expire without right "
-                "to renew."
-        })
-    
-    # Rule 2: Lease expires before franchise
-    lease_expiry = lease.get("expiry_date")
-    franchise_expiry = franchise.get("expiry_date")
-
-    if lease_expiry and franchise_expiry:
-        try:
-            from datetime import datetime
-            le = datetime.strptime(
-                lease_expiry, "%Y-%m-%d")
-            fe = datetime.strptime(
-                franchise_expiry, "%Y-%m-%d")
-            if le < fe:
-                result["rules_triggered"] = \
-                    result.get(
-                        "rules_triggered", [])
-                result["rules_triggered"].append({
-                    "rule": "RULE-002",
-                    "title": "Lease expires before"
-                        " franchise",
-                    "severity": "High",
-                    "description": 
-                        f"Lease expires {lease_expiry}"
-                        f" before franchise"
-                        f" {franchise_expiry}."
-                        f" Business rights extend"
-                        f" beyond secured occupation."
-                })
-        except Exception:
-            pass
-
-    # Rule 3: Renewal window timing mismatch
-    lease_earliest = lease.get(
-        "renewal_notice_earliest")
-    franchise_earliest = franchise.get(
-        "renewal_notice_earliest")
-
-    if lease_earliest and franchise_earliest:
-        try:
-            from datetime import datetime
-            ld = datetime.strptime(
-                lease_earliest, "%Y-%m-%d")
-            fd = datetime.strptime(
-                franchise_earliest, "%Y-%m-%d")
-            diff_days = abs((ld - fd).days)
-            if diff_days > 60:
-                result.setdefault(
-                    "rules_triggered", []).append({
-                    "rule": "RULE-003",
-                    "title": "Renewal window"
-                        " timing mismatch",
-                    "severity": "Medium",
-                    "description":
-                        f"Lease and franchise renewal"
-                        f" notice windows differ by"
-                        f" {diff_days} days. Coordinate"
-                        f" renewal actions carefully."
-                })
-        except Exception:
-            pass
-
-    # Rule 4: Significant beneficial occupation
-    lease_bo = lease.get(
-        "beneficial_occupation_date")
-    lease_comm = lease.get(
-        "legal_commencement_date")
-    if lease_bo and lease_comm:
-        bo_flag = lease.get(
-            "beneficial_occupation_flag")
-        bo_days = lease.get(
-            "beneficial_occupation_days", 0)
-        if bo_flag and bo_days >= 30:
-            result.setdefault(
-                "rules_triggered", []).append({
-                "rule": "RULE-004",
-                "title": "Pre-trading occupation"
-                    " exposure",
-                "severity": "Medium",
-                "description":
-                    f"Beneficial occupation"
-                    f" {bo_days} days before legal"
-                    f" commencement. Tenant occupied"
-                    f" and trading before lease"
-                    f" legally commenced."
-            })
-
-    # Rule 5: Renewal window already missed
-    for doc in [lease, franchise]:
-        status = doc.get("renewal_window_status")
-        if status in [
-            "window_closed_renewal_possible",
-            "too_late_rights_lapsed"
-        ]:
-            urgency = "Critical" if status == \
-                "too_late_rights_lapsed" else "High"
-            result.setdefault(
-                "rules_triggered", []).append({
-                "rule": "RULE-005",
-                "title": f"Renewal window issue:"
-                    f" {doc.get('document','')}",
-                "severity": urgency,
-                "description":
-                    f"Renewal window status:"
-                    f" {status}. Immediate"
-                    f" attention required."
-            })
-
-    # Rule 6: Neither can renew
-    if not lease_can_renew and \
-       not franchise_can_renew:
-        result.setdefault(
-            "rules_triggered", []).append({
-            "rule": "RULE-006",
-            "title": "No renewal rights"
-                " on either agreement",
-            "severity": "High",
-            "description":
-                "Neither the lease nor the"
-                " franchise agreement contains"
-                " a renewal option. Both will"
-                " expire without right to renew."
-                " New agreements must be"
-                " negotiated before expiry."
-        })
-
-    return result
 
 async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
     from datetime import datetime
