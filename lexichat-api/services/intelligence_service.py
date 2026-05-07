@@ -573,7 +573,7 @@ Do NOT calculate renewal deadlines.
 Do NOT calculate expiry from commencement.
 Extract raw values only."""
 
-            reduce_task = f"""You MUST produce a SEPARATE expiry entry for THIS document marked with --- DOCUMENT START ---.
+            reduce_task = f"""You MUST produce a single expiry entry for the document named '{fname}' based on the provided map results.
 CRITICAL ANTI-CONTAMINATION RULE:
 You are processing ONLY this document. Do not infer, borrow, compare, or import dates, clauses, names, or renewal terms from any other document.
 
