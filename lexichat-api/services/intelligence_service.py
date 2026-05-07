@@ -443,167 +443,83 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
             full_text = f"\n--- DOCUMENT START: {fname} ---\n{doc_text}\n"
             
             example_expiries = (
-                '{\n      "document": "' + fname + '",\n'
+                '{\n'
+                '      "document": "' + fname + '",\n'
                 '      "doc_type": "Lease Agreement or Franchise Agreement",\n'
-                '      "legal_commencement_date": "YYYY-MM-DD or null",\n'
-                '      "rental_commencement_date": "YYYY-MM-DD or null",\n'
-                '      "beneficial_occupation_date": "YYYY-MM-DD or null",\n'
-                '      "ai_extracted_expiry_date": "YYYY-MM-DD or null",\n'
-                '      "duration_years": 5,\n'
-                '      "renewal_type": "manual_renewal",\n'
-                '      "renewal_period_years": null,\n'
-                '      "ai_extracted_renewal_notice_latest": "YYYY-MM-DD or null",\n'
-                '      "notice_min_months": 6,\n'
-                '      "notice_max_months": 9,\n'
+                '      "candidate_legal_commencement_dates": [\n'
+                '        { "value": "YYYY-MM-DD", "confidence": 0.95, "source_text": "...", "source_page": 1, "source_clause": "...", "source_label": "Lease Period", "extraction_method": "explicit_schedule", "priority": 1 }\n'
+                '      ],\n'
+                '      "candidate_rental_commencement_dates": [],\n'
+                '      "candidate_beneficial_occupation_dates": [],\n'
+                '      "candidate_expiry_dates": [],\n'
+                '      "candidate_duration_years": [],\n'
+                '      "candidate_renewal_types": [\n'
+                '        { "value": "automatic_renewal_with_opt_out", "confidence": 0.95, "source_text": "...", "source_page": 2, "source_clause": "...", "source_label": "Renewal", "extraction_method": "explicit_clause", "priority": 1 }\n'
+                '      ],\n'
+                '      "candidate_notice_min_months": [],\n'
+                '      "candidate_notice_max_months": [],\n'
                 '      "requires_notice": true,\n'
                 '      "notice_party": "tenant",\n'
                 '      "renewal_action_required": true,\n'
                 '      "renewal_clause_text": "verbatim excerpt under 50 words",\n'
-                '      "clause_confidence": 0.95,\n'
                 '      "action_required": "specific action text"\n'
                 '    }'
             )
 
-            map_task = """Extract all dates, deadlines, and timeframes from this section. You MUST extract ALL of these specific fields if present:
-1. legal_commencement_date — when the lease legally begins.
-2. beneficial_occupation_date — when tenant gets early access.
-3. rental_commencement_date — when rent starts being paid.
-4. ai_extracted_expiry_date — when it ends (extract raw value, do not calculate).
-RENEWAL EXTRACTION RULES:
-Extract ONLY what is explicitly stated.
-Do NOT calculate dates — extract raw values.
+            map_task = """Extract all dates, deadlines, and timeframes from this section as EVIDENCE OBJECTS.
+For each field, extract an array of candidates if multiple apply.
 
-1. renewal_type: Must be exactly one of:
-   manual_renewal | automatic_renewal | automatic_renewal_with_opt_out |
-   tenant_option | landlord_option | mutual_option | no_renewal_right | unknown
-   
-   Classification guide:
-   - 'auto-renews unless...' = automatic_renewal_with_opt_out
-   - 'either party may cancel' = automatic_renewal_with_opt_out
-   - 'tenant may renew by notice' = manual_renewal
-   - 'landlord may renew' = landlord_option
-   - 'shall automatically renew' = automatic_renewal
-   - 'no renewal' or 'N/A' = no_renewal_right
+EVIDENCE HIERARCHY ENGINE (Assign priority 1-5):
+Priority 1: Explicit expiry or commencement in schedule/annexure, or Fundamental Terms section.
+Priority 2: Defined terms section, specific lease period clause.
+Priority 3: Commencement + explicit duration calculation in text.
+Priority 4: Rental schedules/tables.
+Priority 5: Inferred operational text.
 
-   CRITICAL: If the document contains any of:
-   - 'N/A' adjacent to renewal option
-   - 'no renewal' or 'no option to renew'
-   - 'option to renew: N/A'
-   - Schedule item explicitly showing N/A
-   Then renewal_type MUST be 'no_renewal_right'.
-   Do NOT infer a renewal option unless 
-   explicitly stated in a renewal clause.
-   The absence of a renewal clause means no_renewal_right.
-   A holdover/month-to-month clause is NOT
-   a renewal option — it is a different 
-   legal mechanism.
+CRITICAL INSTRUCTIONS:
+- Schedule/Fundamental Terms fields ("Beneficial Occupation Date", "Lease Period", "Commencement Date", "Expiry Date") OUTRANK rental tables.
+- N1 Lease Example:
+  If Schedule says: Beneficial Occupation Date: 2025-09-01, Lease period / expiry: 2025-09-01 to 2030-09-30, but Rental schedule starts 2025-10-01.
+  Correct extraction: legal_commencement_date=2025-09-01 (Priority 1), beneficial_occupation_date=2025-09-01, rental_commencement_date=2025-10-01, expiry_date=2030-09-30.
+- N1 Franchise Example:
+  If wording says "automatically renews unless notice is given", renewal_type MUST be "automatic_renewal_with_opt_out" (NOT tenant_option).
 
-2. notice_min_months: Integer.
-   - 'not less than 6 months' = notice_min_months: 6
-   - 'at least 6 months before expiry' = notice_min_months: 6
-   If not stated set to null.
+Extract candidate arrays for:
+1. candidate_legal_commencement_dates
+2. candidate_beneficial_occupation_dates
+3. candidate_rental_commencement_dates
+4. candidate_expiry_dates
+5. candidate_duration_years
+6. candidate_renewal_types
+   Must be: manual_renewal | automatic_renewal | automatic_renewal_with_opt_out | tenant_option | landlord_option | mutual_option | no_renewal_right | unknown
+   If clause says "N/A" or "no option to renew", value MUST be "no_renewal_right".
+7. candidate_notice_min_months (Integer)
+8. candidate_notice_max_months (Integer)
 
-3. notice_max_months: Integer or null.
-   - 'not more than 9 months' = notice_max_months: 9
-   Many agreements have no upper bound —
-   set to null if only minimum stated.
-
-4. requires_notice: true/false.
-   false for automatic renewal.
-   true for manual, opt_out, tenant_option.
-
-5. notice_party: tenant | landlord | 
-   either | mutual
-   Who must give notice.
-
-6. renewal_action_required: true/false.
-   false if automatic with no opt-out needed.
-
-7. renewal_period_years: Integer or null.
-   The renewal PERIOD — may differ from 
-   original term. e.g. original 5 years,
-   renewal 3 years.
-
-8. renewal_clause_text: Copy verbatim up to
-   50 words of the renewal clause.
-   This is for auditability.
-   
-   Do NOT confuse holdover clauses with 
-   renewal options. A holdover clause 
-   ('deemed to lease on monthly basis') 
-   is what happens AFTER expiry with no 
-   renewal — it is NOT a renewal mechanism.
-   renewal_clause_text must quote the actual 
-   renewal option clause, not the holdover.
-
-9. clause_confidence: Float 0.0-1.0.
-   0.95+ = clause found verbatim and clear
-   0.70-0.94 = clause found but ambiguous
-   below 0.70 = inferred, not explicit
-
-10. legal_commencement_date: Date as written. YYYY-MM-DD format.
-    rental_commencement_date: Date as written. YYYY-MM-DD format.
-    beneficial_occupation_date: Date as written. YYYY-MM-DD format.
-    CRITICAL: Do NOT confuse these three. If only one 'Commencement Date' is specified, it is typically legal_commencement_date.
-    Do NOT use rental schedule dates as legal_commencement_date.
-    
-    For FRANCHISE AGREEMENTS specifically:
-    Annexure A contains Financial and Other Terms.
-    You MUST search for and extract:
-    - Item 7 or 'Commencement Date' in Annexure A
-      → this is legal_commencement_date
-    - Item 8 or 'Duration' in Annexure A  
-      → this is duration_years
-
-11. ai_extracted_expiry_date: Date as written.
-    YYYY-MM-DD. null if not explicit.
-
-12. duration_years: Integer. Extract from
-    'period of X years' clause.
-
-13. ai_extracted_renewal_notice_latest: YYYY-MM-DD.
-    The AI-interpreted candidate notice deadline based on the extracted clause text. Do NOT calculate mathematically, extract what the clause suggests.
-
-CRITICAL ANTI-CONTAMINATION RULE:
-You are processing ONLY this document. Do not infer, borrow, compare, or import dates, clauses, names, or renewal terms from any other document.
-
-All other date calculations will be 
-performed by the deterministic date engine.
-Do NOT calculate renewal deadlines.
-Do NOT calculate expiry from commencement.
-Extract raw values only."""
+Every candidate object MUST have:
+"value", "confidence" (0.0-1.0), "source_text", "source_page", "source_clause", "source_label" (e.g. "Lease Period", "Rental Commencement Date"), "extraction_method", "priority" (1-5).
+"""
 
             reduce_task = f"""You MUST produce a single expiry entry for the document named '{fname}' based on the provided map results.
 CRITICAL ANTI-CONTAMINATION RULE:
 You are processing ONLY this document. Do not infer, borrow, compare, or import dates, clauses, names, or renewal terms from any other document.
 
 CRITICAL: The 'document' field in the expiry entry MUST be exactly: '{fname}'
-Do NOT write 'Unknown', 'Document 1', or any invented name.
-For each document entry you MUST populate:
-- doc_type: Must be exactly one of: 'Lease Agreement' or 'Franchise Agreement'. Determine from the document content and filename. A franchise agreement typically contains terms like 'Franchisor', 'Franchisee', 'Franchise Fee'. A lease agreement typically contains terms like 'Lessor', 'Lessee', 'monthly rental', 'premises'.
-Find the Expiry Date, Renewal Notice Deadline, and relevant Notification Clause for each document.
-For franchise agreements: if any map result contains a commencement date from Annexure A, use it as legal_commencement_date. Annexure A data takes priority over body text for financial and date terms.
+Aggregate ALL evidence candidates from the map results. DO NOT discard conflicting dates. Put them in the candidate arrays so the deterministic engine can resolve them.
 Output ONLY valid JSON matching this exact structure:
 {{
   "document_context": {{
-    "location": "Extract ONLY the physical store/shop premises address — this is where the business actually trades from. Look for fields labeled 'PREMISES', 'Shop No', 'Store Location', or 'Location' in the schedule or annexure. Do NOT extract company registered addresses, head office addresses, domicilium addresses, or postal addresses. The premises address is typically a shop number in a shopping centre or building.",
-    "parties": [
-      {{"role": "Landlord/Lessor/Franchisor/etc", "name": "Full legal entity name"}}
-    ],
-    "obligations": [
-      {{
-        "party": "Party name",
-        "category": "Financial | Operational | Maintenance | Compliance",
-        "obligation": "Description of the obligation",
-        "clause_reference": "e.g. 4.2.3 or Schedule 1"
-      }}
-    ]
+    "location": "...",
+    "parties": [ {{"role": "...", "name": "..."}} ],
+    "obligations": []
   }},
   "expiries": [
     {example_expiries}
   ]
 }}
-If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Return ONLY the JSON object."""
+Return ONLY the JSON object."""
+
+
 
             def create_legacy_op(t):
                 def legacy_op():
@@ -666,6 +582,12 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                     
                                 expiries = result.get("expiries", [])
                                 # We expect 1 expiry per document but loop just in case
+
+                                def resolve_candidates(candidates):
+                                    if not candidates: return None
+                                    if not isinstance(candidates, list): return candidates
+                                    return sorted(candidates, key=lambda x: x.get("priority", 99))[0]
+                                    
                                 for exp in expiries:
                                     exp["document_id"] = doc_info["id"]
                                     exp["pinecone_doc_id"] = doc_info["pinecone_doc_id"]
@@ -678,40 +600,25 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                             v_flags.append("Filename hallucination corrected")
                                         exp["validation_flags"] = v_flags
                                         
-                                    # Post-processing date deterministic engine
-                                    
-                                    # Cache check (Fundamental terms)
-                                    ft_cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_fundamental_terms.json")
-                                    if os.path.exists(ft_cache_path):
-                                        try:
-                                            with open(ft_cache_path, "r") as f:
-                                                ft_cache = json.load(f)
-                                            ft_items = ft_cache.get("fundamental_terms", [])
-                                            if isinstance(ft_items, dict):
-                                                ft_items = [ft_items]
-                                            
-                                            if not exp.get("legal_commencement_date"):
-                                                doc_type = exp.get("doc_type","")
-                                                if "Franchise" in doc_type:
-                                                    for ft in ft_items:
-                                                        if "Franchise" in str(ft.get("doc_type","")):
-                                                            ft_comm = ft.get("commencement_date") or ft.get("franchise_terms", {}).get("commencement_date")
-                                                            ft_expiry = ft.get("expiry_date") or ft.get("franchise_terms", {}).get("expiry_date")
-                                                            if ft_comm:
-                                                                exp["legal_commencement_date"] = ft_comm
-                                                                exp["commencement_source"] = "fundamental_terms_cache"
-                                                                if ft_expiry and ft_comm:
-                                                                    try:
-                                                                        c = datetime.strptime(ft_comm, "%Y-%m-%d")
-                                                                        e = datetime.strptime(ft_expiry, "%Y-%m-%d")
-                                                                        exp["duration_years"] = (e.year - c.year)
-                                                                    except Exception:
-                                                                        pass
-                                                                break
-                                        except Exception:
-                                            pass
-                                            
-                                    ai_expiry = exp.get("ai_extracted_expiry_date")
+                                    v_flags = exp.get("validation_flags", [])
+                                        
+                                    # Resolve candidates
+                                    for key in ["legal_commencement_date", "rental_commencement_date", "beneficial_occupation_date", "expiry_date", "duration_years", "renewal_type", "notice_min_months", "notice_max_months"]:
+
+                                        if key == "expiry_date": cand_key = "candidate_expiry_dates"
+                                        elif key.endswith("s"): cand_key = f"candidate_{key}"
+                                        else: cand_key = f"candidate_{key}s"
+                                        candidates = exp.get(cand_key, [])
+                                        resolved = resolve_candidates(candidates)
+                                        if resolved and isinstance(resolved, dict):
+                                            exp[f"{key}_evidence"] = resolved
+                                            exp[key] = resolved.get("value")
+                                            # Also keep candidates array
+                                            exp[cand_key] = candidates
+                                        elif resolved is not None:
+                                            exp[key] = resolved
+
+                                    ai_expiry = exp.get("expiry_date")
                                     legal_comm = exp.get("legal_commencement_date")
                                     rental_comm = exp.get("rental_commencement_date")
                                     bo_comm = exp.get("beneficial_occupation_date")
@@ -719,10 +626,33 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                     if legal_comm and exp.get("duration_years"):
                                         calc = calculate_expiry(legal_comm, exp.get("duration_years"), "day_before")
                                         exp["deterministic_expiry_date"] = calc["date"]
-                                        exp["expiry_calculation_basis"] = calc["basis"] + (" (commencement from fundamental_terms cache)" if exp.get("commencement_source") == "fundamental_terms_cache" else "")
-                                        exp["expiry_date"] = exp["deterministic_expiry_date"]
+                                        exp["expiry_calculation_basis"] = calc["basis"]
+                                        
+                                        # Explicit Expiry Precedence
+                                        if ai_expiry:
+                                            from datetime import datetime
+                                            try:
+                                                a_d = datetime.strptime(ai_expiry, "%Y-%m-%d").date()
+                                                d_d = datetime.strptime(calc["date"], "%Y-%m-%d").date()
+                                                if abs((a_d - d_d).days) > 45:
+                                                    v_flags.append("Calculated expiry differs materially from explicit expiry — verify commencement/duration inputs")
+                                                    exp["expiry_date"] = ai_expiry
+                                                    exp["expiry_determination"] = "explicit_overrode_deterministic"
+                                                elif abs((a_d - d_d).days) > 1:
+                                                    exp["expiry_date"] = ai_expiry
+                                                    exp["expiry_determination"] = "explicit_minor_deviation"
+                                                else:
+                                                    exp["expiry_date"] = calc["date"]
+                                                    exp["expiry_determination"] = "deterministic_aligned_with_explicit"
+                                            except Exception:
+                                                exp["expiry_date"] = ai_expiry
+                                                exp["expiry_determination"] = "explicit_fallback"
+                                        else:
+                                            exp["expiry_date"] = calc["date"]
+                                            exp["expiry_determination"] = "deterministic_calculated"
                                     else:
                                         exp["expiry_date"] = ai_expiry
+                                        exp["expiry_determination"] = "explicit_only"
                                         
                                     expiry = exp.get("expiry_date")
                                     
@@ -740,14 +670,14 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                     min_m = exp.get("notice_min_months")
                                     max_m = exp.get("notice_max_months")
                                     if expiry and min_m:
-                                        window = calculate_renewal_window(expiry, min_m, max_m or min_m)
+                                        window = calculate_renewal_window(expiry, int(min_m), int(max_m) if max_m else int(min_m))
                                         exp["deterministic_renewal_notice_earliest"] = window["renewal_notice_earliest"]
                                         exp["deterministic_renewal_notice_latest"] = window["renewal_notice_latest"]
                                         exp["renewal_notice_earliest"] = window["renewal_notice_earliest"]
                                         exp["renewal_notice_latest"] = window["renewal_notice_latest"]
                                         exp["renewal_window_basis"] = window["basis"]
                                         
-                                        status = check_renewal_window_status(expiry, min_m, max_m or min_m)
+                                        status = check_renewal_window_status(expiry, int(min_m), int(max_m) if max_m else int(min_m))
                                         exp["renewal_window_status"] = status["status"]
                                         exp["renewal_urgency"] = status["urgency"]
                                         exp["days_until_expiry"] = status["days_until_expiry"]
@@ -761,11 +691,21 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                             exp["days_until_expiry"] = db_result["days"]
                                             
                                     if bo_comm and legal_comm:
-                                        bo_check = is_beneficial_occupation_significant(bo_comm, legal_comm)
-                                        exp["beneficial_occupation_flag"] = bo_check["flag"]
-                                        exp["beneficial_occupation_days"] = bo_check["days_difference"]
+                                        if bo_comm == legal_comm:
+                                            pass
+                                        else:
+                                            from datetime import datetime
+                                            try:
+                                                b_d = datetime.strptime(bo_comm, "%Y-%m-%d")
+                                                l_d = datetime.strptime(legal_comm, "%Y-%m-%d")
+                                                if b_d < l_d:
+                                                    if rental_comm and legal_comm == rental_comm:
+                                                        v_flags.append("Rent-free/beneficial occupation period detected — verify lease commencement vs rental commencement")
+                                                    else:
+                                                        v_flags.append("Beneficial occupation starts before legal commencement")
+                                            except Exception:
+                                                pass
                                         
-                                    v_flags = exp.get("validation_flags", [])
                                     engine_flags = validate_dates(
                                         legal_commencement=legal_comm,
                                         rental_commencement=rental_comm,
@@ -774,19 +714,10 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                         renewal_latest=exp.get("deterministic_renewal_notice_latest")
                                     )
                                     if engine_flags:
-                                        v_flags.extend(engine_flags)
+                                        for f in engine_flags:
+                                            if "Expiry date is before commencement date" in f or "Renewal notice deadline is after expiry date" in f:
+                                                v_flags.append(f)
                                         
-                                    ai_latest = exp.get("ai_extracted_renewal_notice_latest")
-                                    det_latest = exp.get("deterministic_renewal_notice_latest")
-                                    if ai_latest and det_latest:
-                                        try:
-                                            a_d = datetime.strptime(ai_latest, "%Y-%m-%d").date()
-                                            d_d = datetime.strptime(det_latest, "%Y-%m-%d").date()
-                                            if abs((a_d - d_d).days) > 7:
-                                                v_flags.append("AI renewal notice deadline differs materially from deterministic calculation")
-                                        except ValueError:
-                                            pass
-                                            
                                     exp["validation_flags"] = v_flags
                                     
                                     dt = exp.get("doc_type", "")
@@ -794,6 +725,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                         exp["doc_type"] = "Lease Agreement"
                                         
                                     final_expiries.append(exp)
+
                             else:
                                 msg = data_obj.get("message", "")
                                 yield f"data: {json.dumps({'status': 'processing', 'message': f'[{fname}] {msg}'})}\n\n"
