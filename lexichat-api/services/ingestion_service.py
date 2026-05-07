@@ -99,6 +99,62 @@ def process_document_background(doc_id: str, file_path_saved: str, filename: str
                     for chunk in smart_chunk(text, page_num):
                         chunks_with_meta.append(chunk)
                         
+            MIN_TEXT_THRESHOLD = 500
+            ingestion_status = "parsed"
+
+            if not full_markdown or \
+               len(full_markdown.strip()) < \
+               MIN_TEXT_THRESHOLD:
+                ingestion_status = "ocr_required"
+                try:
+                    import pytesseract
+                    from pdf2image import convert_from_path
+                    import tempfile
+                    with tempfile.TemporaryDirectory() \
+                         as tmpdir:
+                        images = convert_from_path(
+                            file_path_saved, dpi=300,
+                            output_folder=tmpdir)
+                        ocr_text = ""
+                        chunks_with_meta.clear()
+                        for i, img in enumerate(images):
+                            page_text = \
+                                pytesseract.image_to_string(
+                                    img, lang='eng',
+                                    config='--psm 6')
+                            ocr_text += (
+                                f"\n--- PAGE {i+1} ---\n"
+                                f"{page_text}")
+                            if page_text.strip():
+                                for chunk in smart_chunk(page_text, i+1):
+                                    chunks_with_meta.append(chunk)
+                        if len(ocr_text.strip()) > \
+                           MIN_TEXT_THRESHOLD:
+                            full_markdown = ocr_text
+                            ingestion_status = \
+                                "ocr_completed"
+                        else:
+                            ingestion_status = \
+                                "failed_no_text"
+                except Exception as ocr_err:
+                    print(f"OCR error: {ocr_err}")
+                    ingestion_status = "failed_no_text"
+
+            # Save status file
+            import json as _json
+            status_path = os.path.join(
+                UPLOAD_DIR, f"{doc_id}_status.json")
+            with open(status_path, "w") as sf:
+                _json.dump({
+                    "ingestion_status": ingestion_status,
+                    "char_count": len(
+                        full_markdown.strip()
+                        if full_markdown else ""),
+                    "ocr_used": ingestion_status in [
+                        "ocr_completed",
+                        "failed_no_text"]
+                }, sf)
+
             # Cache the pristine LlamaParse markdown so downstream endpoints (Audit, Compare) can load it instantly
             with open(os.path.join(UPLOAD_DIR, f"{doc_id}.md"), "w") as f:
                 f.write(full_markdown)
