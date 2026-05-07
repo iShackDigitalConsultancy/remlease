@@ -674,11 +674,51 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                         resolved = resolve_candidates(key, candidates, v_flags)
                                         if resolved and isinstance(resolved, dict):
                                             exp[f"{key}_evidence"] = resolved
-                                            exp[key] = resolved.get("value")
+                                            val = resolved.get("value")
+                                            if key.endswith("date") or "notice" in key:
+                                                if is_iso_date(val):
+                                                    exp[key] = val
+                                                else:
+                                                    exp[key] = None
+                                            else:
+                                                exp[key] = val
                                             # Also keep candidates array
                                             exp[cand_key] = candidates
                                         elif resolved is not None:
-                                            exp[key] = resolved
+                                            if key.endswith("date") or "notice" in key:
+                                                if is_iso_date(resolved):
+                                                    exp[key] = resolved
+                                                else:
+                                                    exp[key] = None
+                                            else:
+                                                exp[key] = resolved
+
+                                    dt = exp.get("doc_type", "")
+                                    fname_lower = fname.lower()
+                                    is_franchise = "franchise" in dt.lower() or "franchise" in fname_lower or "fa_" in fname_lower
+                                    
+                                    if is_franchise and not exp.get("legal_commencement_date"):
+                                        cache_file = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
+                                        found_lease_date = None
+                                        if os.path.exists(cache_file):
+                                            try:
+                                                with open(cache_file, "r") as f:
+                                                    cache_data = json.load(f)
+                                                    for cached_exp in cache_data:
+                                                        if "franchise" not in cached_exp.get("doc_type", "").lower() and cached_exp.get("legal_commencement_date"):
+                                                            found_lease_date = cached_exp["legal_commencement_date"]
+                                                            break
+                                            except:
+                                                pass
+                                        
+                                        if found_lease_date:
+                                            exp["legal_commencement_date"] = found_lease_date
+                                            exp["date_resolution_status"] = "inferred_dependency"
+                                            v_flags.append("Date inferred from aligned lease")
+                                        else:
+                                            exp["date_resolution_status"] = "dependency_required"
+                                            exp["date_dependency"] = "requires legal_commencement_date"
+                                            v_flags.append("Date value unresolved — dependency required")
 
                                     ai_expiry = exp.get("expiry_date")
                                     legal_comm = exp.get("legal_commencement_date")
