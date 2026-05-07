@@ -1703,21 +1703,21 @@ END:VCALENDAR`;
                                                    <td className="p-4 align-top space-y-3 whitespace-nowrap">
                                                        <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
                                                           <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Commencement</span>
-                                                          <span className="font-bold text-sm text-slate-800">{doc.commencement_date || "N/A"}</span>
+                                                          <span className="font-bold text-sm text-slate-800">{doc.commencement_date || <span className="text-slate-400 italic text-[10px]">Not extracted</span>}</span>
                                                        </div>
                                                        <div className={`border rounded-lg p-2 shadow-sm ${isUrgent ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
                                                           <span className={`block text-[9px] uppercase font-bold mb-0.5 ${isUrgent ? 'text-red-500' : 'text-slate-400'}`}>Expiry Date</span>
-                                                          <span className={`font-bold text-sm ${isUrgent ? 'text-red-700' : 'text-slate-800'}`}>{doc.expiry_date || "N/A"}</span>
+                                                          <span className={`font-bold text-sm ${isUrgent ? 'text-red-700' : 'text-slate-800'}`}>{doc.expiry_date || <span className="text-slate-400 italic text-[10px]">Not extracted</span>}</span>
                                                        </div>
                                                    </td>
                                                    <td className="p-4 align-top space-y-3 whitespace-nowrap">
                                                        <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
                                                           <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Renewal Deadline</span>
-                                                          <span className="font-semibold text-xs text-brand-accent">{doc.renewal_deadline || "N/A"}</span>
+                                                          <span className="font-semibold text-xs text-brand-accent">{doc.renewal_deadline || <span className="text-slate-400 italic text-[10px]">Not extracted</span>}</span>
                                                        </div>
                                                        <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
                                                           <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Option Period</span>
-                                                          <span className="font-semibold text-xs text-slate-700">{doc.renewal_option_period || "None stated"}</span>
+                                                          <span className="font-semibold text-xs text-slate-700">{doc.renewal_option_period || <span className="text-slate-400 italic text-[10px]">Not extracted</span>}</span>
                                                        </div>
                                                    </td>
                                                    <td className="p-4 align-top">
