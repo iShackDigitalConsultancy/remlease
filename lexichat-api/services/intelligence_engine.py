@@ -6,7 +6,8 @@ from datetime import datetime
 from dependencies import UPLOAD_DIR, groq_client
 from services.map_reduce import batch_document
 
-def load_workspace_caches(workspace_id: str) -> dict:
+def load_workspace_caches(workspace_id: str, cache_dir: str = None) -> dict:
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     """Load all available cache files for a workspace. Returns dict with keys: expiries, fundamental_terms, audit"""
     caches = {}
     
@@ -705,7 +706,8 @@ def validate_intelligence_report(
 
     return report
 
-async def generate_intelligence_report(workspace_id: str, doc_ids: list, filenames: list, full_text: str, db, doc_map: dict = None) -> dict:
+async def generate_intelligence_report(workspace_id: str, doc_ids: list, filenames: list, full_text: str, db, doc_map: dict = None, cache_dir: str = None) -> dict:
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     """Generate the full Intelligence Report"""
     # Load existing caches
     caches = load_workspace_caches(workspace_id)
