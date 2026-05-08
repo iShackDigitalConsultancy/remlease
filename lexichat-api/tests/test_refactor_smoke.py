@@ -4,7 +4,9 @@ from unittest.mock import MagicMock
 from services.ingestion_service import ingest_document
 
 def test_ingest_document_smoke():
-    with open("tests/fixtures/smoke_test.pdf", "rb") as f:
+    import os
+    file_path = os.path.join(os.path.dirname(__file__), "fixtures", "smoke_test.pdf")
+    with open(file_path, "rb") as f:
         pdf_bytes = f.read()
     
     mock_db = MagicMock()
