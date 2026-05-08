@@ -1,5 +1,8 @@
 # Local Benchmark Environment Design Proposal
-## Ticket: PLAN-EXT-003
+## Ticket: PLAN-EXT-003-REV1
+
+### Revision History
+- **REV1**: Revisions to cost controls (5.4), Pinecone isolation guards (5.1), determinism & equivalence rules (7.3, 7.4), seed corpus storage phases (6.2), realistic implementation estimates (11), parsing health score (4.4), plus new sections for Secrets Management (12), CI Integration (13), and Schema Versioning (14).
 
 ## SECTION 1 — REQUIREMENTS
 
@@ -97,9 +100,50 @@ According to LlamaParse vendor docs, we should expose:
 - `disable_ocr` (bool): Force text-layer only extraction for speed.
 
 ### 4.4 Parsing Health Score
-To detect silent degradation between basic and premium:
-- **Markdown Size Ratio:** `len(md) / len(raw_pdf_text)`.
-- **Table Count:** `md_text.count("|---|")`.
+To deeply detect degradation without circular dependencies, the benchmark produces a per-document parsing health record.
+
+```json
+  "parsing_health": {
+    "pages_total": 45,
+    "pages_with_extractable_text": 45,
+    "characters_total": 108122,
+    "characters_per_page_min": 150,
+    "characters_per_page_max": 4200,
+    "characters_per_page_median": 2100,
+    "tables_detected": 4,
+    "headings_detected": 15,
+    "annexures_referenced": 4,
+    "schedules_referenced": 0,
+    "definitions_section_present": true,
+    "docusign_envelopes_detected": 2,
+    "garbled_char_runs": 0,
+    "single_letter_word_count": 12,
+    "suspected_ocr_artifacts": 3
+  }
+```
+
+**Computation Rules:**
+- `pages_total`: Computed by invoking the lightweight external binary `pdfinfo`.
+- `pages_with_extractable_text`: Use `pdftotext` to check if a text layer natively exists per page.
+- `characters_per_page`: Derived from splitting the LlamaParse markdown by its `<!-- PAGE X START -->` tags.
+- `tables_detected`: Count markdown tables `|---|`.
+- `headings_detected`: Regex count of `# ` to `#### ` markers in the markdown.
+- `garbled_char_runs`: Regex `[^\x00-\x7F]{3,}` or sequences of `�` on the markdown.
+- `single_letter_word_count`: Regex `\b[a-zA-Z]\b`. Spikes indicate OCR spacing failures.
+- `annexures_referenced`: Case-insensitive regex count for "annexure".
+- `schedules_referenced`: Case-insensitive regex count for "schedule".
+- `definitions_section_present`: True if heading "definitions" or "interpretation" is found.
+- `docusign_envelopes_detected`: Regex count of "DocuSign Envelope ID".
+- `suspected_ocr_artifacts`: Heuristic count of weird symbols often produced by bad OCR.
+
+**Degraded Threshold Definition:**
+A parse is flagged as "Degraded" for human review if ANY of the following are met:
+1. `characters_total` < `(pages_total * 200)` (indicates massive dropouts).
+2. `garbled_char_runs` > 5 (indicates bad OCR charset).
+3. `single_letter_word_count` > `(characters_total * 0.05)` (indicates total spacing failure).
+4. `definitions_section_present` == false (for commercial leases > 15 pages, this is highly suspicious).
+
+---|")`.
 - **Heading Hierarchy:** Ratio of `#` vs `##` tags.
 - **Garbage Character Ratio:** Count of `[^\w\s\.,;:!?\-\(\)\[\]\{\}"'\|#\*/\]` vs total length.
 
@@ -108,7 +152,24 @@ To detect silent degradation between basic and premium:
 ## SECTION 5 — ISOLATION FROM PRODUCTION
 
 ### 5.1 Pinecone Isolation
-The benchmark CLI will generate a unique UUID namespace (e.g., `benchmark-run-202605081430`) and pass it down the pipeline. `index.upsert(vectors=..., namespace=namespace_id)`. Code guard: If `is_benchmark=True`, an exception is raised if `namespace` is empty or equals the production default.
+To ensure the benchmark never pollutes production Pinecone, we enforce a defense-in-depth isolation approach:
+
+1. **Production Guard (`index.upsert` wrapper):** Must assert that the configured namespace EXACTLY matches the production environment constant. If not, raise `ProductionNamespaceViolation`.
+2. **Benchmark Guard:** Must assert that the namespace starts with the prefix `"benchmark-"`. If the production namespace is passed, raise `BenchmarkNamespaceViolation`.
+3. **Lowest-Layer Enforcement:** Both assertions must live inside the centralized Pinecone client wrapper/dependency (`dependencies.py` or equivalent), ensuring no upstream caller can bypass them.
+4. **Cleanup Step:** The `benchmarks/run.py` harness MUST call `index.delete(namespace="benchmark-{run_id}")` at the end of every run. If this API call fails, the `manifest.json` logs `cleanup_failed: true`.
+5. **Billing Impact:** Pinecone bills by compute/storage pods, not strictly by namespace existence. However, accumulated vectors in abandoned namespaces consume index storage capacity, potentially forcing a costly pod upgrade. Cleanup is mandatory.
+6. **Orphan Sweeper:** A periodic cron task (e.g., weekly) will list all namespaces via the Pinecone API, filter for `benchmark-*`, and execute `index.delete` for any namespace older than 7 days.
+
+**Assertion Contract:**
+```python
+def safe_upsert(vectors, namespace):
+    if is_production():
+        assert namespace == PROD_NAMESPACE, "ProductionNamespaceViolation"
+    else:
+        assert namespace.startswith("benchmark-"), "BenchmarkNamespaceViolation"
+    index.upsert(vectors=vectors, namespace=namespace)
+```
 
 ### 5.2 PostgreSQL Isolation
 Use an in-memory SQLite database (`sqlite:///:memory:`) initialized via SQLAlchemy's `Base.metadata.create_all(bind=engine)` at the start of the benchmark. This guarantees absolute isolation, 0 latency, and auto-cleanup.
@@ -117,8 +178,40 @@ Use an in-memory SQLite database (`sqlite:///:memory:`) initialized via SQLAlche
 The refactored services will accept an `upload_dir` argument. The benchmark will pass `benchmarks/runs/{run_id}/docs/` instead of the global `config.UPLOAD_DIR`. This physically sandboxes all intermediate writes.
 
 ### 5.4 Cost Controls
-- **Rate Limits:** Implement a semaphore or simple `asyncio.sleep` throttle between external API calls.
-- **Circuit Breaker:** The benchmark CLI tracks cumulative token usage. If `cumulative_cost > $10.00`, it immediately raises a `CostThresholdExceededError` and aborts.
+We use a deterministic, model-backed cost control system tracked in real-time.
+
+**5.4.1 Cost Model**
+*Prices cited as of May 2026:*
+- **LlamaParse:** Basic is $0.003 / page. Premium is $0.01 / page.
+- **Groq (llama-3.3-70b):** $0.59 / 1M input tokens. $0.79 / 1M output tokens.
+- **Voyage (voyage-law-2):** $0.12 / 1M tokens.
+- **Pinecone:** Serverless reads/writes cost ~$0.002 per 1000 operations.
+
+**5.4.2 Pre-flight Projection**
+Before any API calls, the benchmark CLI projects the maximum cost:
+- Runs `pdfinfo` to count pages -> calculates LlamaParse cost.
+- Estimates tokens based on average 4.5 characters per token ratio (OpenAI standard heuristic).
+- Calculates maximum Voyage token spend.
+- Prints projection to CLI. If the projection > $5 USD, pauses and requires explicit operator `[Y/n]` confirmation.
+
+**5.4.3 In-flight Tracking**
+Tracking is accumulated progressively. The harness records costs immediately after receiving API responses. The run can abort cleanly between documents to save incurred costs.
+
+**5.4.4 Per-vendor Caps**
+Configuration in `benchmark_config.json`:
+```json
+"cost_caps_usd": {
+  "llamaparse": 3.00,
+  "groq": 5.00,
+  "voyage": 1.00,
+  "pinecone": 0.50,
+  "total": 8.00
+}
+```
+If cumulative tracked spend crosses any cap, `CostThresholdExceededError` aborts the remaining documents.
+
+**5.4.5 Output Summary**
+`cost_summary.json` logs the actual spend vs. projected spend per vendor and per document. A discrepancy > 1.5x on any vendor triggers an explicit warning log.
 
 ---
 
@@ -138,8 +231,21 @@ benchmarks/inputs/
 ```
 
 ### 6.2 Version Control for Confidential PDFs
-**Proposal:** Do NOT store real lease PDFs in git or git-lfs. They contain sensitive client PI. 
-Store the benchmark corpus in an encrypted AWS S3 bucket. Include a simple `benchmarks/sync_corpus.py` script that downloads them locally using AWS SSO credentials. `benchmarks/inputs/*.pdf` must be strictly listed in `.gitignore`.
+Real lease PDFs contain sensitive PI and must NEVER be committed to Git or Git LFS.
+
+**Phase 1 (Current: 6-15 documents):**
+- Documents are manually placed in a local directory `~/.rem-leases-benchmarks/inputs/` (outside the repo).
+- A Git-tracked manifest at `benchmarks/inputs/MANIFEST.txt` specifies the expected filenames and SHA256 hashes.
+- If the local files' SHA256 hashes don't perfectly match the manifest, the benchmark explicitly refuses to run.
+
+**Phase 2 (15-100 documents):**
+- When the corpus grows beyond what is easily shareable securely (e.g., via 1Password), documents move to a private encrypted AWS S3 bucket (or R2, Backblaze, encrypted Dropbox).
+- A `sync_corpus.py` script authenticates via AWS SSO and mirrors the bucket into the local inputs folder.
+
+**Phase 3 (100+ documents):**
+- Full secrets-managed pipeline with rigorous access auditing (out of scope for this design).
+
+*We will proceed with Phase 1 for this implementation.*
 
 ### 6.3 Gitignore Patterns
 ```gitignore
@@ -169,13 +275,19 @@ The vast majority of extraction pipelines strictly use `temperature=0.0`.
 Benchmark runs MUST force `temperature=0.0` across the entire pipeline. Determinism is required to diff extraction runs; otherwise, semantic variance makes automated regressions impossible to detect. 
 
 ### 7.3 Comparing Non-Deterministic Results
-Even at `T=0.0`, API changes or network routing can occasionally induce slight variance. A fair comparison script should check for exact matches, but allow N=3 runs if variance is detected.
+- **Default Check:** The standard benchmark does `N=1` run per config, forces `temperature=0.0`, and uses a fixed `seed` where supported by Groq.
+- **Determinism Check Mode:** Periodically (e.g., weekly), an operator passes `--determinism-check` to run `N=3` times.
+- **Variance Logging:** If `--determinism-check` finds ANY extraction variance across the 3 runs, it does not silently pick a median. It writes a `variance_report.json` logging the exact fields, runs, and differing values, throwing a loud warning flag.
 
 ### 7.4 Equivalence Rules
-- **Numeric/Dates:** Exact ISO matching required. `2024-01-01` vs `2024-01-01`.
-- **Enums/Types:** Exact string matching required.
-- **Evidence Quotes:** Allowed a 10% Levenshtein distance variance, provided the core clause numbers remain identical.
-- **Regression:** A field goes from `extracted` to `null`, or an ISO date changes fundamentally.
+- **Exact Match Required:** Numeric fields, dates, currencies, percentages, addresses, registration numbers, and party names MUST match EXACTLY (after whitespace trimming/normalization).
+- **Evidence Quotes:** MUST match EXACTLY (100% char-for-char). If an LLM reformats a quote by dropping commas or correcting grammar, it is a regression.
+- **Free-Text Fields:** Summaries and recommendations are evaluated for semantic equivalence by an LLM-as-judge. Levenshtein distance is strictly prohibited for legal text.
+- **Regression Severity Definitions:**
+  - **CRITICAL:** A previously extracted non-null value becomes `null`.
+  - **HIGH:** An extracted value changes (e.g. `2025-10-01` -> `2025-10-02`).
+  - **MEDIUM:** Extraction value is identical, but confidence score drops by > 0.2.
+  - **LOW:** Semantic difference detected in a free-text field.
 
 ---
 
@@ -249,27 +361,92 @@ The eval framework only needs:
 
 ## SECTION 11 — IMPLEMENTATION TICKET PREVIEW
 
-### IMPL-EXT-003a: Production code refactor
-- **Scope:** Introduce `cache_dir` params to engines. Extract `ingest_document` from FastAPI route.
-- **Time:** 1 hour.
-- **Risk:** Low. Reversible via standard git revert.
+We will execute IMPL-EXT-003 in independently reviewable and deployable sub-tickets. Estimates account for implementation, unit/smoke testing, code review, documentation, and rollback verification.
 
-### IMPL-EXT-003b: Local benchmark harness skeleton
-- **Scope:** Build `run.py`. Implement in-memory SQLite setup. Implement dummy iteration over inputs.
-- **Time:** 2 hours.
+### IMPL-EXT-003a: Production Code Refactor
+- **Scope:** Extract `cache_dir` params to decouple `intelligence_engine.py` from `UPLOAD_DIR`. Extract pure file-processing function from FastAPI route in `ingestion_service.py`. Implement Pinecone lowest-layer isolation assertions.
+- **Time Estimate:** 4-6 hours (High rigor required for production I/O changes).
 
-### IMPL-EXT-003c: LlamaParse mode & Config isolation
-- **Scope:** Build JSON config loader. Pipe `premium_mode` through to the LlamaParse `requests.post` call.
-- **Time:** 1 hour.
+### IMPL-EXT-003b: Local Benchmark Harness & Storage
+- **Scope:** Build `run.py` CLI. Setup ephemeral SQLite database seeding. Enforce input SHA256 manifest checks (Phase 1 corpus).
+- **Time Estimate:** 4-6 hours.
 
-### IMPL-EXT-003d: Observability & Artifact writing
-- **Scope:** Write logic to dump `manifest.json`, `cost_summary.json`, and prompt text.
-- **Time:** 2 hours.
+### IMPL-EXT-003c: Orchestration, Cost, & Config Isolation
+- **Scope:** Pipe `premium_mode` configurations. Implement the `cost_summary.json` logic, Pre-flight Projection, and real-time vendor spend caps. 
+- **Time Estimate:** 6-8 hours.
 
-### IMPL-EXT-003e: Seed corpus sync script
-- **Scope:** Write `sync_corpus.py` (boto3) and update `.gitignore`.
-- **Time:** 1 hour.
+### IMPL-EXT-003d: Observability, Trace, & Health Score
+- **Scope:** Implement the `trace.log`, Prompt captures, and the `parsing_health` record calculation using `pdfinfo`.
+- **Time Estimate:** 4-6 hours.
 
-### IMPL-EXT-003f: End-to-end smoke test
-- **Scope:** Run the 6 documents on `premium=false`, review logs, declare victory.
-- **Time:** 1 hour.
+### IMPL-EXT-003e: Determinism & Smoke Test
+- **Scope:** Implement the `--determinism-check` logic. Generate `workspace_summary.json` with `schema_version`. Run the full end-to-end smoke test on the local corpus.
+- **Time Estimate:** 4-5 hours.
+
+
+---
+
+## SECTION 12 — SECRETS MANAGEMENT
+
+### 12.1 Key Provenance
+**Recommendation:** We will use **Separate development keys** exclusively. 
+Using production keys risks polluting production billing metrics, exposing enterprise quotas to local loops, and hitting rate limits that crash the live platform.
+
+### 12.2 Injection Strategy
+Keys are provided exclusively via a local `.env` file (strictly `gitignored`). This scales well for our current team size and avoids the overhead of AWS Secrets Manager for local workstation testing.
+
+### 12.3 Manifest Logging
+The `manifest.json` will NEVER record key values. It will record:
+- Used Environment Variables: `["GROQ_API_KEY", "LLAMA_CLOUD_API_KEY"]`
+- Fingerprints: `sha256(key)[:8]` to allow debugging if a run failed due to a rotated/stale key without exposing the secret.
+
+### 12.4 Key Rotation Hygiene
+Rotating a key does **not** invalidate golden runs. The golden run evaluates the system's deterministic logic. If the underlying LLM weights haven't changed (because we pin model versions like `llama-3.3-70b`), the API key itself has no bearing on outputs.
+
+---
+
+## SECTION 13 — CI INTEGRATION PLAN
+
+### 13.1 CI Provider
+GitHub Actions.
+
+### 13.2 Workflow Structure
+- `.github/workflows/benchmark-smoke.yml`: Triggers on PR to `main`. Runs a subset of 3 critical documents. Fails the build if any CRITICAL or HIGH regression occurs against the Golden Run.
+- `.github/workflows/benchmark-full.yml`: Triggers nightly via cron. Runs the full benchmark corpus and commits `workspace_summary.json` to a dedicated `benchmark-results` branch (or posts a slack webhook summary).
+
+### 13.3 CI Corpus Procurement
+In Phase 1, the CI workflow will decrypt an encrypted ZIP file containing the corpus (using a repository secret as the decryption key). This keeps the raw PDFs out of standard source control while allowing CI native access.
+
+### 13.4 CI Secrets
+GitHub Repository Secrets will supply: `DEV_GROQ_API_KEY`, `DEV_LLAMA_CLOUD_API_KEY`, `DEV_VOYAGE_API_KEY`.
+
+### 13.5 CI Cost Caps
+A strict budget cap configuration of **$3.00 USD total per run** will be passed to the CLI inside GitHub actions. If it exceeds this, the CI step safely aborts and fails.
+
+### 13.6 Merge Blockers
+- **CRITICAL / HIGH Regression:** Blocks PR merge automatically.
+- **MEDIUM Regression:** Requires an explicit PR review approval specifically citing "Approved confidence drop".
+- **LOW Regression:** Will not block merge, but will output as a warning annotation in the GitHub PR UI.
+
+---
+
+## SECTION 14 — OUTPUT SCHEMA VERSIONING
+
+### 14.1 Embedded Schema Keys
+Every output JSON artifact (`manifest.json`, `cost_summary.json`, `workspace_summary.json`, `intelligence_report.json`) must include a root-level `"schema_version": "1.0.0"`.
+
+### 14.2 Versioning Policy
+**Semantic Versioning (SemVer)**. 
+- Major (1.x): Breaking schema changes.
+- Minor (x.1): Additive fields.
+- Patch (x.x.1): Typo fixes or description changes.
+
+### 14.3 Breaking vs Additive Changes
+- **Breaking:** Renaming an existing key, nesting previously flat fields, changing a data type (e.g., date string to unix timestamp), or removing a field.
+- **Additive:** Adding a new metric to `parsing_health` or adding a new field to extract in `fundamental_terms`.
+
+### 14.4 Migration Policy
+When a major `schema_version` bumps (e.g., v1 -> v2), the operator must explicitly trigger a pipeline re-baseline by running `make benchmark --baseline-run`. Old golden runs will fail parsing validation if an eval tries to diff v1 against v2. We do NOT write automated schema migration scripts for JSON dumps; we just re-run the pipeline to generate fresh truth.
+
+### 14.5 Canonical Definition
+Pydantic models housed within `lexichat-api/models/schemas.py` or a dedicated `benchmarks/schemas/` module will serve as the canonical definitions, providing automatic JSON-Schema generation and runtime validation during benchmark output generation.
