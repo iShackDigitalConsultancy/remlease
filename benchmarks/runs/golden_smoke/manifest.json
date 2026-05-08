@@ -1,0 +1,47 @@
+{
+  "schema_version": "0.1.0",
+  "run_id": "2026-05-08T08-20-27Z_default",
+  "run_tag": "default",
+  "started_at": "2026-05-08T08:20:27.343956Z",
+  "completed_at": "2026-05-08T08:20:40.548547Z",
+  "wall_clock_seconds": 13.204597,
+  "git_commit": "252f7e0b3da17bc191f8ee90c2b080cff970f976",
+  "input_dir": "benchmarks/inputs/",
+  "output_dir": "benchmarks/runs/2026-05-08T08-20-27Z_default",
+  "doc_limit": 1,
+  "skip_embeddings": true,
+  "dry_run": false,
+  "config": {
+    "llamaparse_config": {
+      "premium_mode": "false",
+      "result_type": "markdown"
+    },
+    "groq_extraction_model": "llama-3.3-70b-versatile",
+    "voyage_embedding_model": "voyage-law-2"
+  },
+  "secrets_fingerprint": {
+    "GROQ_API_KEY": "b92d3a05",
+    "LLAMA_CLOUD_API_KEY": null,
+    "VOYAGE_API_KEY": "b3042ac0"
+  },
+  "pinecone": {
+    "namespace": "benchmark-2026-05-08T08-20-27Z_default",
+    "cleanup_attempted": true,
+    "cleanup_succeeded": false,
+    "cleanup_error": "(404)\nReason: Not Found\nHTTP response headers: HTTPHeaderDict({'Date': 'Fri, 08 May 2026 08:20:40 GMT', 'Content-Type': 'application/json', 'Content-Length': '55', 'Connection': 'keep-alive', 'x-pinecone-request-latency-ms': '2', 'x-envoy-upstream-service-time': '3', 'x-pinecone-response-duration-ms': '4', 'server': 'envoy'})\nHTTP response body: {\"code\":5,\"message\":\"Namespace not found\",\"details\":[]}\n"
+  },
+  "documents": [
+    {
+      "doc_id": "b7762b49-e4f9-446f-955e-bef15ebe1c44",
+      "filename": "smoke_test.pdf",
+      "size_bytes": 1447,
+      "status": "failed",
+      "error": "(400)\nReason: Bad Request\nHTTP response headers: HTTPHeaderDict({'Date': 'Fri, 08 May 2026 08:20:40 GMT', 'Content-Type': 'application/json', 'Content-Length': '104', 'Connection': 'keep-alive', 'x-pinecone-request-latency-ms': '98', 'x-envoy-upstream-service-time': '58', 'x-pinecone-response-duration-ms': '100', 'server': 'envoy'})\nHTTP response body: {\"code\":3,\"message\":\"Vector dimension 1536 does not match the dimension of the index 1024\",\"details\":[]}\n",
+      "stages": {
+        "ingestion_seconds": null,
+        "expiries_seconds": null,
+        "intelligence_seconds": null
+      }
+    }
+  ]
+}
