@@ -80,10 +80,11 @@ def analyze_document_brief(doc_id: str, filename: str, sample_text: str) -> dict
         }
 
 
-def analyze_document_brief_background(doc_id: str, filename: str, sample_text: str):
+def analyze_document_brief_background(doc_id: str, filename: str, sample_text: str, cache_dir: str = None):
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     try:
         brief = analyze_document_brief(doc_id, filename, sample_text)
-        with open(os.path.join(UPLOAD_DIR, f"{doc_id}_brief.json"), "w") as f:
+        with open(os.path.join(cache_dir, f"{doc_id}_brief.json"), "w") as f:
             json.dump(brief, f)
     except Exception as e:
         print(f"Background brief extraction failed: {e}")
@@ -104,7 +105,7 @@ def get_document_brief(doc_id: str, current_user: Optional[models.User] = Depend
     if not doc:
         raise HTTPException(status_code=403, detail="Access denied")
         
-    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}_brief.json")
+    file_path = os.path.join(cache_dir, f"{doc_id}_brief.json")
     if not os.path.exists(file_path):
         return {"brief": None}
         
@@ -132,7 +133,7 @@ async def document_audit(payload, current_user: Optional[models.User] = Depends(
     doc_text = None
     for candidate_id in [payload.doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
         if not candidate_id: continue
-        file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+        file_path = os.path.join(cache_dir, f"{candidate_id}.md")
         if os.path.exists(file_path):
             try:
                 with open(file_path, "r") as f:
@@ -239,7 +240,7 @@ Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON obje
         return json.loads(raw)
 
     workspace_id = doc.workspace_id
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_audit.json")
+    cache_path = os.path.join(cache_dir, f"{workspace_id}_audit.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
@@ -270,7 +271,7 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
             
         for candidate_id in [doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
             if not candidate_id: continue
-            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            file_path = os.path.join(cache_dir, f"{candidate_id}.md")
             if os.path.exists(file_path):
                 try:
                     with open(file_path, "r") as f:
@@ -374,7 +375,7 @@ Copy it exactly as it appears after 'DOCUMENT START:' in the input."""
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return json.loads(raw)
 
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_fundamental_terms.json")
+    cache_path = os.path.join(cache_dir, f"{workspace_id}_fundamental_terms.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
@@ -406,7 +407,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
         doc_text = None
         for candidate_id in [doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
             if not candidate_id: continue
-            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            file_path = os.path.join(cache_dir, f"{candidate_id}.md")
             if os.path.exists(file_path):
                 try:
                     with open(file_path, "r") as f:
@@ -713,7 +714,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                                 
                                         # 2. Check disk cache if not found in memory
                                         if not found_lease_date:
-                                            cache_file = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
+                                            cache_file = os.path.join(cache_dir, f"{workspace_id}_extract_expiries.json")
                                             if os.path.exists(cache_file):
                                                 try:
                                                     with open(cache_file, "r") as f:
@@ -872,7 +873,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
         # Consolidate all results
         from services.risk_engine import calculate_workspace_risk_scores
         
-        cache_file = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
+        cache_file = os.path.join(cache_dir, f"{workspace_id}_extract_expiries.json")
         if os.path.exists(cache_file):
             try:
                 with open(cache_file, "r") as f:
@@ -954,7 +955,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
         
         yield f"data: {json.dumps({'status': 'complete', 'data': final_data})}\n\n"
 
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
+    cache_path = os.path.join(cache_dir, f"{workspace_id}_extract_expiries.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, pipeline_wrapper()), media_type="text/event-stream")
 
 async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -969,7 +970,7 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
     final_data = []
     
     for ws in workspaces:
-        cache_path = os.path.join(UPLOAD_DIR, f"{ws.id}_extract_expiries.json")
+        cache_path = os.path.join(cache_dir, f"{ws.id}_extract_expiries.json")
         ws_summary = {
             "workspace_id": str(ws.id),
             "workspace_name": ws.name,
@@ -1098,7 +1099,7 @@ async def document_compare(payload, current_user: Optional[models.User] = Depend
         doc_text = None
         for candidate_id in [doc_id, doc.pinecone_doc_id, doc.id]:
             if not candidate_id: continue
-            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            file_path = os.path.join(cache_dir, f"{candidate_id}.md")
             if os.path.exists(file_path):
                 try:
                     with open(file_path, "r") as f:
@@ -1226,7 +1227,7 @@ Return ONLY the raw JSON object. Do not wrap in markdown code blocks."""
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return json.loads(raw)
 
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_compare.json")
+    cache_path = os.path.join(cache_dir, f"{workspace_id}_compare.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
@@ -1314,7 +1315,7 @@ async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(g
             page_one_anchors = []
             for doc_id in request.doc_ids:
                 try:
-                    md_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
+                    md_path = os.path.join(cache_dir, f"{doc_id}.md")
                     if os.path.exists(md_path):
                         with open(md_path, "r") as f:
                             p1_text = f.read(1500) # Load the absolutely critical opening definitions

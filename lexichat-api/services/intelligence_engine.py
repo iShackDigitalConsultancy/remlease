@@ -11,7 +11,7 @@ def load_workspace_caches(workspace_id: str) -> dict:
     caches = {}
     
     for report_type in ["extract_expiries", "fundamental_terms", "audit"]:
-        cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_{report_type}.json")
+        cache_path = os.path.join(cache_dir, f"{workspace_id}_{report_type}.json")
         if os.path.exists(cache_path):
             try:
                 with open(cache_path, "r") as f:
@@ -726,7 +726,7 @@ async def generate_intelligence_report(workspace_id: str, doc_ids: list, filenam
     report["generated_at"] = datetime.utcnow().isoformat() + "Z"
     
     # Cache result to {workspace_id}_intelligence_report.json
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_intelligence_report.json")
+    cache_path = os.path.join(cache_dir, f"{workspace_id}_intelligence_report.json")
     with open(cache_path, "w") as f:
         json.dump(report, f, indent=2)
     
