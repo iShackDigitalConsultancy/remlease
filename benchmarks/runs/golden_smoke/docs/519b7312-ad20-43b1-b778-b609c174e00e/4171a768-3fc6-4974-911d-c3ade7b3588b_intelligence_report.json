@@ -1,0 +1,148 @@
+{
+  "workspace_id": "4171a768-3fc6-4974-911d-c3ade7b3588b",
+  "generated_at": "2026-05-08T08:24:09.180405Z",
+  "schema_version": "1.0",
+  "documents_analysed": [
+    {
+      "filename": "smoke_test.pdf",
+      "doc_type": "Lease",
+      "extraction_confidence": 0.85
+    }
+  ],
+  "review_status": {
+    "requires_human_review": true,
+    "review_reason": "Missing critical fields and low extraction confidence",
+    "approved_by": null,
+    "approved_at": null
+  },
+  "dependency_map": {
+    "field_type": "inferred",
+    "lease_depends_on_franchise": null,
+    "franchise_depends_on_lease": null,
+    "franchisor_controls_lease_assignment": null,
+    "term_mismatch_days": null,
+    "term_mismatch_flag": null,
+    "dependency_notes": "Insufficient data to determine dependencies",
+    "confidence": 0.0,
+    "source_evidence": []
+  },
+  "risk_summary": [
+    {
+      "risk_id": "RISK-001",
+      "field_type": "inferred",
+      "category": "Compliance",
+      "severity": "Critical",
+      "title": "Missing critical lease information",
+      "description": "The lease document is missing critical information, including premises size and financial figures",
+      "recommendation": "Obtain a complete and updated lease document",
+      "confidence": 0.95,
+      "source_evidence": [
+        {
+          "document": "smoke_test.pdf",
+          "clause": "Entire document",
+          "text": "No relevant text found",
+          "page": "N/A"
+        }
+      ]
+    }
+  ],
+  "financial_model": {
+    "lease_costs": {
+      "field_type": "extracted",
+      "base_rent_per_sqm": null,
+      "premises_size_sqm": null,
+      "current_monthly_rent": null,
+      "escalation_rate": null,
+      "escalation_type": null,
+      "projected_rent_at_expiry": null,
+      "confidence": 0.0,
+      "source_evidence": []
+    },
+    "franchise_costs": {
+      "field_type": "extracted",
+      "upfront_license_fee": null,
+      "monthly_franchise_fee_pct": null,
+      "marketing_fee_pct": null,
+      "renewal_fee": null,
+      "confidence": 0.0,
+      "source_evidence": []
+    },
+    "total_occupancy_exposure": {
+      "field_type": "derived",
+      "monthly_fixed": null,
+      "monthly_variable_estimate": null,
+      "renewal_cost_exposure": null,
+      "exit_cost_estimate": null
+    },
+    "assumptions": [
+      {
+        "assumption": "Insufficient data to estimate occupancy exposure",
+        "impact": "Unable to provide a comprehensive financial model",
+        "confidence": 1.0
+      }
+    ]
+  },
+  "control_analysis": {
+    "field_type": "inferred",
+    "lease_control": {
+      "party": null,
+      "approval_rights": [],
+      "source_evidence": []
+    },
+    "brand_control": {
+      "party": null,
+      "approval_rights": [],
+      "source_evidence": []
+    },
+    "assignment_control": {
+      "can_tenant_assign_lease": null,
+      "franchisor_approval_required": null,
+      "source_evidence": []
+    }
+  },
+  "action_items": [
+    {
+      "priority": "Critical",
+      "field_type": "inferred",
+      "owner": "Tenant",
+      "action": "Obtain a complete and updated lease document",
+      "due_date": "2024-10-16",
+      "reason": "Missing critical lease information",
+      "source_evidence": [
+        {
+          "document": "smoke_test.pdf",
+          "clause": "Entire document",
+          "text": "No relevant text found",
+          "page": "N/A"
+        }
+      ]
+    }
+  ],
+  "data_quality": {
+    "overall_confidence": 0.0,
+    "missing_critical_fields": [
+      {
+        "field": "premises_size_sqm",
+        "document": "smoke_test.pdf",
+        "searched_locations": [
+          "Entire document",
+          "Preamble",
+          "Schedule (not found)"
+        ],
+        "impact": "Unable to estimate lease costs and occupancy exposure"
+      },
+      {
+        "field": "base_rent_per_sqm",
+        "document": "smoke_test.pdf",
+        "searched_locations": [
+          "Entire document",
+          "Preamble",
+          "Schedule (not found)"
+        ],
+        "impact": "Unable to estimate lease costs and occupancy exposure"
+      }
+    ],
+    "low_confidence_fields": [],
+    "contradictions": []
+  }
+}
