@@ -11,7 +11,7 @@ def hash_secret(secret_val: Optional[str]) -> Optional[str]:
 
 class ManifestBuilder:
     def __init__(self, run_id: str, run_tag: str, started_at, git_commit: str, input_dir: str, output_dir: str, doc_limit: Optional[int], skip_embeddings: bool, dry_run: bool):
-        from config.model_versions import GROQ_MODEL, VOYAGE_MODEL
+        from config.model_versions import GROQ_EXTRACTION_MODEL, VOYAGE_EMBEDDING_MODEL
         
         secrets = SecretsFingerprint(
             GROQ_API_KEY=hash_secret(os.environ.get("GROQ_API_KEY")),
@@ -21,8 +21,8 @@ class ManifestBuilder:
         
         config = ConfigTracking(
             llamaparse_config={"premium_mode": "false", "result_type": "markdown"},
-            groq_extraction_model=GROQ_MODEL,
-            voyage_embedding_model=VOYAGE_MODEL
+            groq_extraction_model=GROQ_EXTRACTION_MODEL,
+            voyage_embedding_model=VOYAGE_EMBEDDING_MODEL
         )
         
         pinecone_tracker = PineconeTracking(
