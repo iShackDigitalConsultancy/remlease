@@ -29,3 +29,36 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # Centralized Dependency exports
 from database import get_db
 from auth import get_current_user, get_current_user_optional
+
+from config.model_versions import PRODUCTION_PINECONE_NAMESPACE
+
+class NamespaceViolation(Exception):
+    """Raised when a Pinecone namespace does not match the expected environment boundaries."""
+    pass
+
+def safe_upsert(index, vectors, namespace):
+    if namespace is None or not isinstance(namespace, str):
+        raise NamespaceViolation("Namespace must be a non-empty string.")
+        
+    if namespace == PRODUCTION_PINECONE_NAMESPACE:
+        pass # OK for Production
+    elif namespace.startswith("benchmark-"):
+        pass # OK for Benchmark
+    else:
+        raise NamespaceViolation(f"NamespaceViolation: Expected production namespace '{PRODUCTION_PINECONE_NAMESPACE}' or prefix 'benchmark-', got '{namespace}'")
+    
+    index.upsert(vectors=vectors, namespace=namespace)
+
+def safe_query(index, vector, top_k, include_metadata, query_filter, namespace):
+    if namespace is None or not isinstance(namespace, str):
+        raise NamespaceViolation("Namespace must be a non-empty string.")
+        
+    if namespace == PRODUCTION_PINECONE_NAMESPACE:
+        pass # OK for Production
+    elif namespace.startswith("benchmark-"):
+        pass # OK for Benchmark
+    else:
+        raise NamespaceViolation(f"NamespaceViolation: Expected production namespace '{PRODUCTION_PINECONE_NAMESPACE}' or prefix 'benchmark-', got '{namespace}'")
+    
+    return index.query(vector=vector, top_k=top_k, include_metadata=include_metadata, filter=query_filter, namespace=namespace)
+

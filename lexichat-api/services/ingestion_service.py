@@ -1,3 +1,4 @@
+from config.model_versions import PRODUCTION_PINECONE_NAMESPACE
 import os
 import uuid
 import time
@@ -6,7 +7,7 @@ from fastapi import HTTPException, BackgroundTasks, UploadFile
 from sqlalchemy.orm import Session
 from typing import Optional
 
-from dependencies import UPLOAD_DIR, index
+from dependencies import safe_upsert, UPLOAD_DIR, index
 import models
 from utils.chunking import smart_chunk
 from services import intelligence_service
@@ -191,7 +192,7 @@ def process_document_background(doc_id: str, file_path_saved: str, filename: str
         return
             
     if vectors_to_upsert:
-        index.upsert(vectors=vectors_to_upsert)
+        safe_upsert(index, vectors_to_upsert, PRODUCTION_PINECONE_NAMESPACE)
         
     # Auto-generate structured document brief securely in the BACKGROUND to drastically cut upload latency
     sample_text = " ".join([c["text"] for c in chunks_with_meta[:15]])

@@ -1,3 +1,5 @@
+from dependencies import safe_upsert
+from config.model_versions import PRODUCTION_PINECONE_NAMESPACE
 from config.model_versions import VOYAGE_EMBEDDING_MODEL
 import os
 import json
@@ -113,7 +115,7 @@ def migrate_voyage_admin(request, request_headers, db):
                                 "text": batch[j]
                             }
                         })
-                    fresh_index.upsert(vectors=vectors_to_upsert)
+                    safe_upsert(fresh_index, vectors_to_upsert, PRODUCTION_PINECONE_NAMESPACE)
                     vectors_upserted += len(vectors_to_upsert)
                     
                     if i + batch_size < len(chunks):

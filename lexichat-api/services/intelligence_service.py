@@ -1,3 +1,4 @@
+from config.model_versions import PRODUCTION_PINECONE_NAMESPACE
 from config.model_versions import VOYAGE_EMBEDDING_MODEL
 from config.model_versions import GROQ_EXTRACTION_MODEL
 import os
@@ -5,7 +6,7 @@ import json
 import re
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from dependencies import UPLOAD_DIR, groq_client, index, vo
+from dependencies import safe_query, UPLOAD_DIR, groq_client, index, vo
 import models
 from sqlalchemy.orm import Session
 from fastapi import Depends, Header
@@ -1281,21 +1282,11 @@ async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(g
         if request.is_firm_search:
             if not current_user or not current_user.firm_id:
                 raise HTTPException(status_code=403, detail="Firm Precedent Search requires a registered firm account.")
-            firm_response = index.query(
-                vector=query_vec,
-                top_k=20,
-                include_metadata=True,
-                filter={"firm_id": {"$eq": current_user.firm_id}}
-            )
+            firm_response = safe_query(index, query_vec, 20, True, {"firm_id": {"$eq": current_user.firm_id}}, PRODUCTION_PINECONE_NAMESPACE)
             matches.extend(firm_response.get('matches', []))
         else:
             for doc_id in request.doc_ids:
-                query_response = index.query(
-                    vector=query_vec,
-                    top_k=chunks_per_doc,
-                    include_metadata=True,
-                    filter={"doc_id": {"$eq": doc_id}}
-                )
+                query_response = safe_query(index, query_vec, chunks_per_doc, True, {"doc_id": {"$eq": doc_id}}, PRODUCTION_PINECONE_NAMESPACE)
                 matches.extend(query_response.get('matches', []))
             
             # Regional Knowledge Base Sweeps (The Law)
