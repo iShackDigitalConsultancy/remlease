@@ -37,8 +37,9 @@ async def cached_pipeline_stream(cache_path: str, force_refresh: bool, pipeline_
 def get_embedding(text: str):
     return vo.embed([text], model=VOYAGE_EMBEDDING_MODEL).embeddings[0]
 
-def analyze_document_brief(doc_id: str, filename: str, sample_text: str) -> dict:
+def analyze_document_brief(doc_id: str, filename: str, sample_text: str, cache_dir: str = None) -> dict:
     """Run a structured Groq extraction and return a JSON brief."""
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     prompt = (
         "You are a senior South African legal analyst. Analyse the following document extract, "
         "which may contain dirty OCR from a signed/scanned lease or contract. "
@@ -90,7 +91,8 @@ def analyze_document_brief_background(doc_id: str, filename: str, sample_text: s
         print(f"Background brief extraction failed: {e}")
 
 
-def get_document_brief(doc_id: str, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+def get_document_brief(doc_id: str, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db), cache_dir: str = None):
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     if current_user:
         doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
             (models.WorkspaceDocument.pinecone_doc_id == doc_id) | (models.WorkspaceDocument.id == doc_id),
@@ -114,7 +116,8 @@ def get_document_brief(doc_id: str, current_user: Optional[models.User] = Depend
     return {"brief": brief}
 
 
-async def document_audit(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+async def document_audit(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db), cache_dir: str = None):
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     # 1. Verify access to the document
     if current_user:
         doc = db.query(models.WorkspaceDocument).join(models.Workspace).filter(
@@ -244,7 +247,8 @@ Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON obje
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
-async def extract_timeline(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+async def extract_timeline(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db), cache_dir: str = None):
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     if not payload.doc_ids:
         raise HTTPException(status_code=400, detail="No documents selected")
         
@@ -379,7 +383,8 @@ Copy it exactly as it appears after 'DOCUMENT START:' in the input."""
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
-async def extract_expiries(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+async def extract_expiries(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db), cache_dir: str = None):
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     if not payload.doc_ids:
         raise HTTPException(status_code=400, detail="No documents selected")
         
@@ -958,7 +963,8 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
     cache_path = os.path.join(cache_dir, f"{workspace_id}_extract_expiries.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, pipeline_wrapper()), media_type="text/event-stream")
 
-async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db), cache_dir: str = None):
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     from datetime import datetime
     if current_user:
         workspaces = db.query(models.Workspace).filter(models.Workspace.firm_id == current_user.firm_id).all()
@@ -1071,7 +1077,8 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
 
 
 
-async def document_compare(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+async def document_compare(payload, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db), cache_dir: str = None):
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     if payload.doc_id_a == payload.doc_id_b:
         raise HTTPException(status_code=400, detail="Must select two different documents to compare")
         
@@ -1231,7 +1238,8 @@ Return ONLY the raw JSON object. Do not wrap in markdown code blocks."""
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
-async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
+async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db), cache_dir: str = None):
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     try:
         # Enforce freemium limit for anonymous users
         if not current_user:
