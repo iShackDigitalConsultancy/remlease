@@ -1,1 +1,6 @@
 .vercel
+
+# Benchmarks
+benchmarks/runs/*
+!benchmarks/runs/.gitkeep
+!benchmarks/runs/golden_smoke/

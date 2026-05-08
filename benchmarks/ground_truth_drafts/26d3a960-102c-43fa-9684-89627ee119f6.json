@@ -1,0 +1,245 @@
+[
+  {
+    "field": "lessor.name",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "lessor.registration",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "lessee.name",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "lessee.registration",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "franchisor.name",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "franchisee.name",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "premises.description",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "premises.address",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "premises.erf",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "premises_size_sqm",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "commencement_date",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "rental_commencement_date",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "beneficial_occupation_date",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "expiry_date",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "lease_period",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "renewal_option_period",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "renewal_notice_deadline",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "renewal_type",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "base_rent_per_sqm",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "monthly_rental",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "escalation_rate",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "security_deposit",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "monthly_franchise_fee_pct",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "marketing_fee_pct",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "lease_franchise_dependency_risk",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "term_mismatch_days",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  },
+  {
+    "field": "assignment_control",
+    "value_from_document": null,
+    "source_quote": "Not extracted yet (DRAFT)",
+    "source_clause": "N/A",
+    "source_page": "N/A",
+    "ag_confidence": "medium",
+    "ambiguity_notes": null
+  }
+]
