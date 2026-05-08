@@ -1,3 +1,4 @@
+from config.model_versions import GROQ_EXTRACTION_MODEL
 import os
 import re
 import json
@@ -79,7 +80,7 @@ Extract only the relevant facts or provisions. If nothing is relevant to the ins
 Output ONLY valid JSON. Do not include markdown fences like ```json."""
 
     response = await client.chat.completions.create(
-        model='llama-3.3-70b-versatile',
+        model=GROQ_EXTRACTION_MODEL,
         messages=[{'role': 'user', 'content': prompt}],
         temperature=0.0,
         max_tokens=2000
@@ -113,7 +114,7 @@ Synthesize these findings into the final requested structured JSON output.
 Output ONLY valid JSON. Do not include markdown fences like ```json."""
 
     response = await client.chat.completions.create(
-        model='llama-3.3-70b-versatile',
+        model=GROQ_EXTRACTION_MODEL,
         messages=[{'role': 'user', 'content': prompt}],
         temperature=0.0,
         max_tokens=4000

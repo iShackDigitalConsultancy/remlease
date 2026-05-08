@@ -1,3 +1,4 @@
+from config.model_versions import VOYAGE_EMBEDDING_MODEL
 with open("old_main.py", "r") as f:
     lines = f.readlines()
 
@@ -59,7 +60,7 @@ from auth import get_current_user_optional
 from database import get_db
 
 def get_embedding(text: str):
-    return vo.embed([text], model="voyage-law-2").embeddings[0]
+    return vo.embed([text], model=VOYAGE_EMBEDDING_MODEL).embeddings[0]
 
 """
 

@@ -1,3 +1,4 @@
+from config.model_versions import GROQ_EXTRACTION_MODEL
 import os
 import json
 from dotenv import load_dotenv
@@ -57,7 +58,7 @@ else:
     print("--- CRITICAL RULE 28 WAS MISSING FROM CONTEXT! ---")
 
 completion = groq_client.chat.completions.create(
-    model='llama-3.3-70b-versatile',
+    model=GROQ_EXTRACTION_MODEL,
     messages=[
         {'role': 'system', 'content': system_prompt},
         {'role': 'user', 'content': query}

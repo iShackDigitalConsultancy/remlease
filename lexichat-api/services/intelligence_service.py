@@ -1,3 +1,5 @@
+from config.model_versions import VOYAGE_EMBEDDING_MODEL
+from config.model_versions import GROQ_EXTRACTION_MODEL
 import os
 import json
 import re
@@ -32,7 +34,7 @@ async def cached_pipeline_stream(cache_path: str, force_refresh: bool, pipeline_
 
 
 def get_embedding(text: str):
-    return vo.embed([text], model="voyage-law-2").embeddings[0]
+    return vo.embed([text], model=VOYAGE_EMBEDDING_MODEL).embeddings[0]
 
 def analyze_document_brief(doc_id: str, filename: str, sample_text: str) -> dict:
     """Run a structured Groq extraction and return a JSON brief."""
@@ -55,7 +57,7 @@ def analyze_document_brief(doc_id: str, filename: str, sample_text: str) -> dict
     )
     try:
         resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
+            model=GROQ_EXTRACTION_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.1,
             max_tokens=800
@@ -226,7 +228,7 @@ Output ONLY valid JSON matching this exact structure:
 
 Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON object."""
         resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
+            model=GROQ_EXTRACTION_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=2000
@@ -362,7 +364,7 @@ NEVER write 'filename.pdf' literally.
 NEVER invent a filename.
 Copy it exactly as it appears after 'DOCUMENT START:' in the input."""
         resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
+            model=GROQ_EXTRACTION_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=3000
@@ -567,7 +569,7 @@ Output ONLY valid JSON matching this exact structure:
 
 If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Perform strict date arithmetic if the contract specifies a start date and term duration. Return ONLY the JSON object."""
                     resp = groq_client.chat.completions.create(
-                        model='llama-3.3-70b-versatile',
+                        model=GROQ_EXTRACTION_MODEL,
                         messages=[{'role': 'user', 'content': prompt}],
                         temperature=0.0,
                         max_tokens=2000
@@ -1214,7 +1216,7 @@ JSON SCHEMA REQUIREMENT:
 
 Return ONLY the raw JSON object. Do not wrap in markdown code blocks."""
         resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
+            model=GROQ_EXTRACTION_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=4000
@@ -1368,7 +1370,7 @@ async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(g
         
         def generate():
             response = groq_client.chat.completions.create(
-                model='llama-3.3-70b-versatile', # Massive 70B reasoning engine, 30,000 TPM limit
+                model=GROQ_EXTRACTION_MODEL, # Massive 70B reasoning engine, 30,000 TPM limit
                 messages=[
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': request.query}

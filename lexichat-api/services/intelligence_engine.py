@@ -1,3 +1,4 @@
+from config.model_versions import GROQ_EXTRACTION_MODEL
 import os
 import json
 import re
@@ -58,7 +59,7 @@ NEVER return 'Not specified' — if data is absent note which locations were sea
         
         try:
             resp = groq_client.chat.completions.create(
-                model='llama-3.3-70b-versatile',
+                model=GROQ_EXTRACTION_MODEL,
                 messages=[{'role': 'user', 'content': prompt}],
                 temperature=0.0,
                 max_tokens=4000
@@ -306,7 +307,7 @@ Output ONLY the Intelligence Report JSON. It must match exactly this schema:
     
     try:
         resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
+            model=GROQ_EXTRACTION_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=8000,

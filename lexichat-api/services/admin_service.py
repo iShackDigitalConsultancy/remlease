@@ -1,3 +1,4 @@
+from config.model_versions import VOYAGE_EMBEDDING_MODEL
 import os
 import json
 import time
@@ -98,7 +99,7 @@ def migrate_voyage_admin(request, request_headers, db):
                 batch_size = 50
                 for i in range(0, len(chunks), batch_size):
                     batch = chunks[i:i+batch_size]
-                    result = vo.embed(batch, model="voyage-law-2")
+                    result = vo.embed(batch, model=VOYAGE_EMBEDDING_MODEL)
                     
                     vectors_to_upsert = []
                     for j, emb in enumerate(result.embeddings):
