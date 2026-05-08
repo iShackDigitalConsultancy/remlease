@@ -19,8 +19,8 @@ class DummyPayload:
         self.force_refresh = force_refresh
 
 def mock_get_embeddings(texts):
-    """Return mock embeddings matching the dimension expected (e.g. 1536 for Voyage)."""
-    return [[0.0] * 1536 for _ in texts]
+    """Return mock embeddings matching the dimension expected (1024 for Voyage Law-2)."""
+    return [[0.0] * 1024 for _ in texts]
 
 def process_documents(input_dir: str, run_dir: str, db, manifest_builder, doc_limit: Optional[int], skip_embeddings: bool, llamaparse_config: dict):
     pdf_files = sorted([f for f in os.listdir(input_dir) if f.lower().endswith(".pdf")])
