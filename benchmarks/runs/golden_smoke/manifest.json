@@ -1,13 +1,13 @@
 {
   "schema_version": "0.1.0",
-  "run_id": "2026-05-08T08-24-04Z_default",
+  "run_id": "2026-05-08T12-57-24Z_default",
   "run_tag": "default",
-  "started_at": "2026-05-08T08:24:04.026507Z",
-  "completed_at": "2026-05-08T08:24:09.438968Z",
-  "wall_clock_seconds": 5.412468,
-  "git_commit": "3c5050afa46e0e10db8f26b7e72eb9d2e62e9918",
+  "started_at": "2026-05-08T12:57:24.978435Z",
+  "completed_at": "2026-05-08T12:57:29.905427Z",
+  "wall_clock_seconds": 4.927002,
+  "git_commit": "2d36edeeb8483132f2e24e26330d35df44f4b2a8",
   "input_dir": "benchmarks/inputs/",
-  "output_dir": "benchmarks/runs/2026-05-08T08-24-04Z_default",
+  "output_dir": "benchmarks/runs/2026-05-08T12-57-24Z_default",
   "doc_limit": 1,
   "skip_embeddings": true,
   "dry_run": false,
@@ -25,22 +25,22 @@
     "VOYAGE_API_KEY": "b3042ac0"
   },
   "pinecone": {
-    "namespace": "benchmark-2026-05-08T08-24-04Z_default",
+    "namespace": "benchmark-2026-05-08T12-57-24Z_default",
     "cleanup_attempted": true,
     "cleanup_succeeded": false,
-    "cleanup_error": "(404)\nReason: Not Found\nHTTP response headers: HTTPHeaderDict({'Date': 'Fri, 08 May 2026 08:24:09 GMT', 'Content-Type': 'application/json', 'Content-Length': '55', 'Connection': 'keep-alive', 'x-pinecone-request-latency-ms': '1', 'x-envoy-upstream-service-time': '2', 'x-pinecone-response-duration-ms': '3', 'server': 'envoy'})\nHTTP response body: {\"code\":5,\"message\":\"Namespace not found\",\"details\":[]}\n"
+    "cleanup_error": "(404)\nReason: Not Found\nHTTP response headers: HTTPHeaderDict({'Date': 'Fri, 08 May 2026 12:57:30 GMT', 'Content-Type': 'application/json', 'Content-Length': '55', 'Connection': 'keep-alive', 'x-pinecone-request-latency-ms': '2', 'x-envoy-upstream-service-time': '3', 'x-pinecone-response-duration-ms': '4', 'server': 'envoy'})\nHTTP response body: {\"code\":5,\"message\":\"Namespace not found\",\"details\":[]}\n"
   },
   "documents": [
     {
-      "doc_id": "519b7312-ad20-43b1-b778-b609c174e00e",
+      "doc_id": "2b0bd66a-6378-483a-9189-8224c15d4104",
       "filename": "smoke_test.pdf",
       "size_bytes": 1447,
       "status": "succeeded",
       "error": null,
       "stages": {
-        "ingestion_seconds": 2.0129311084747314,
-        "expiries_seconds": 0.005315065383911133,
-        "intelligence_seconds": 3.1277880668640137
+        "ingestion_seconds": 2.081242084503174,
+        "expiries_seconds": 0.005285024642944336,
+        "intelligence_seconds": 2.5687761306762695
       }
     }
   ]
