@@ -13,9 +13,16 @@ from utils.chunking import smart_chunk
 from services import intelligence_service
 from services import vector_service
 
-def process_document_background(doc_id: str, file_path_saved: str, filename: str, workspace_id: str, firm_id_meta: str):
+
+def ingest_document(pdf_bytes: bytes, doc_id: str, workspace_id: str, db: Session, upload_dir: str, llamaparse_config: dict, filename: str, firm_id_meta: str) -> dict:
     import time
+    import json as _json
+    import os
     
+    file_path_saved = os.path.join(upload_dir, f"{doc_id}.pdf")
+    with open(file_path_saved, "wb") as f:
+        f.write(pdf_bytes)
+        
     llama_api_key = os.environ.get("LLAMA_CLOUD_API_KEY")
     chunks_with_meta = []
     full_markdown = ""
@@ -28,12 +35,10 @@ def process_document_background(doc_id: str, file_path_saved: str, filename: str
             for i, page in enumerate(doc):
                 text = page.get_text()
                 
-                # If PyMuPDF couldn't find text, it's likely a scanned image
                 if len(text.strip()) < 50:
                     try:
                         import pytesseract
                         import pdf2image
-                        # Convert just this page to image to save memory (pages are 1-indexed in pdf2image)
                         images = pdf2image.convert_from_path(file_path_saved, first_page=i+1, last_page=i+1)
                         if images:
                             text = pytesseract.image_to_string(images[0])
@@ -46,11 +51,11 @@ def process_document_background(doc_id: str, file_path_saved: str, filename: str
                     for chunk in smart_chunk(text, page_num):
                         chunks_with_meta.append(chunk)
             
-            with open(os.path.join(UPLOAD_DIR, f"{doc_id}.md"), "w") as f:
+            with open(os.path.join(upload_dir, f"{doc_id}.md"), "w") as f:
                 f.write(full_markdown)
         except Exception as e:
             print(f"Invalid or corrupted PDF file during fallback extraction. {str(e)}")
-            return
+            return {"status": "error", "message": "Corrupted PDF"}
             
     else:
         try:
@@ -59,10 +64,9 @@ def process_document_background(doc_id: str, file_path_saved: str, filename: str
                 "Accept": "application/json"
             }
             
-            # 1. Upload to LlamaParse Headless Pipeline
             with open(file_path_saved, "rb") as f:
                 files = {"file": f}
-                data = {"premium_mode": "false", "result_type": "markdown"}
+                data = llamaparse_config
                 upload_resp = requests.post("https://api.cloud.llamaindex.ai/api/parsing/upload", headers=headers, files=files, data=data)
                 upload_resp.raise_for_status()
                 
@@ -70,7 +74,6 @@ def process_document_background(doc_id: str, file_path_saved: str, filename: str
             if not job_id:
                 raise Exception("Failed to retrieve LlamaParse Job ID")
                 
-            # 2. Poll the Headless Pipeline until successful extraction
             max_retries = 60
             for _ in range(max_retries):
                 status_resp = requests.get(f"https://api.cloud.llamaindex.ai/api/parsing/job/{job_id}", headers=headers)
@@ -84,7 +87,6 @@ def process_document_background(doc_id: str, file_path_saved: str, filename: str
             else:
                 raise Exception("Document parsing timed out after 2 minutes")
 
-            # 3. Pull the granular JSON array detailing perfectly structured markdown page-by-page
             result_resp = requests.get(f"https://api.cloud.llamaindex.ai/api/parsing/job/{job_id}/result/json", headers=headers)
             result_resp.raise_for_status()
             
@@ -103,72 +105,50 @@ def process_document_background(doc_id: str, file_path_saved: str, filename: str
             MIN_TEXT_THRESHOLD = 500
             ingestion_status = "parsed"
 
-            if not full_markdown or \
-               len(full_markdown.strip()) < \
-               MIN_TEXT_THRESHOLD:
+            if not full_markdown or len(full_markdown.strip()) < MIN_TEXT_THRESHOLD:
                 ingestion_status = "ocr_required"
                 try:
                     import pytesseract
                     from pdf2image import convert_from_path
                     import tempfile
-                    with tempfile.TemporaryDirectory() \
-                         as tmpdir:
-                        images = convert_from_path(
-                            file_path_saved, dpi=300,
-                            output_folder=tmpdir)
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        images = convert_from_path(file_path_saved, dpi=300, output_folder=tmpdir)
                         ocr_text = ""
                         chunks_with_meta.clear()
                         for i, img in enumerate(images):
-                            page_text = \
-                                pytesseract.image_to_string(
-                                    img, lang='eng',
-                                    config='--psm 6')
-                            ocr_text += (
-                                f"\n--- PAGE {i+1} ---\n"
-                                f"{page_text}")
+                            page_text = pytesseract.image_to_string(img, lang='eng', config='--psm 6')
+                            ocr_text += f"\n--- PAGE {i+1} ---\n{page_text}"
                             if page_text.strip():
                                 for chunk in smart_chunk(page_text, i+1):
                                     chunks_with_meta.append(chunk)
-                        if len(ocr_text.strip()) > \
-                           MIN_TEXT_THRESHOLD:
+                        if len(ocr_text.strip()) > MIN_TEXT_THRESHOLD:
                             full_markdown = ocr_text
-                            ingestion_status = \
-                                "ocr_completed"
+                            ingestion_status = "ocr_completed"
                         else:
-                            ingestion_status = \
-                                "failed_no_text"
+                            ingestion_status = "failed_no_text"
                 except Exception as ocr_err:
                     print(f"OCR error: {ocr_err}")
                     ingestion_status = "failed_no_text"
 
-            # Save status file
-            import json as _json
-            status_path = os.path.join(
-                UPLOAD_DIR, f"{doc_id}_status.json")
+            status_path = os.path.join(upload_dir, f"{doc_id}_status.json")
             with open(status_path, "w") as sf:
                 _json.dump({
                     "ingestion_status": ingestion_status,
-                    "char_count": len(
-                        full_markdown.strip()
-                        if full_markdown else ""),
-                    "ocr_used": ingestion_status in [
-                        "ocr_completed",
-                        "failed_no_text"]
+                    "char_count": len(full_markdown.strip() if full_markdown else ""),
+                    "ocr_used": ingestion_status in ["ocr_completed", "failed_no_text"]
                 }, sf)
 
-            # Cache the pristine LlamaParse markdown so downstream endpoints (Audit, Compare) can load it instantly
-            with open(os.path.join(UPLOAD_DIR, f"{doc_id}.md"), "w") as f:
+            with open(os.path.join(upload_dir, f"{doc_id}.md"), "w") as f:
                 f.write(full_markdown)
 
         except Exception as e:
             print(f"LlamaParse parsing completely failed: {e}")
-            return
+            return {"status": "error", "message": "LlamaParse failure"}
             
     if not chunks_with_meta:
         print("Could not extract any text from the document.")
-        return
+        return {"status": "error", "message": "No text extracted"}
         
-    # Embed and store in Pinecone
     vectors_to_upsert = []
     texts = [c["text"] for c in chunks_with_meta]
     try:
@@ -189,15 +169,35 @@ def process_document_background(doc_id: str, file_path_saved: str, filename: str
             })
     except Exception as e:
         print(f"Embedding error: {e}")
-        return
+        return {"status": "error", "message": "Embedding error"}
             
     if vectors_to_upsert:
         safe_upsert(index, vectors_to_upsert, PRODUCTION_PINECONE_NAMESPACE)
         
-    # Auto-generate structured document brief securely in the BACKGROUND to drastically cut upload latency
     sample_text = " ".join([c["text"] for c in chunks_with_meta[:15]])
-    intelligence_service.analyze_document_brief_background(doc_id, filename, sample_text)
+    intelligence_service.analyze_document_brief_background(doc_id, filename, sample_text, cache_dir=upload_dir)
+    return {"status": "success", "chunks": len(vectors_to_upsert)}
 
+def process_document_background(doc_id: str, file_path_saved: str, filename: str, workspace_id: str, firm_id_meta: str):
+    from database import SessionLocal
+    from config.model_versions import LLAMAPARSE_DEFAULT_MODE, LLAMAPARSE_RESULT_TYPE
+    with open(file_path_saved, "rb") as f:
+        pdf_bytes = f.read()
+    
+    db = SessionLocal()
+    try:
+        ingest_document(
+            pdf_bytes=pdf_bytes,
+            doc_id=doc_id,
+            workspace_id=workspace_id,
+            db=db,
+            upload_dir=UPLOAD_DIR,
+            llamaparse_config={"premium_mode": LLAMAPARSE_DEFAULT_MODE, "result_type": LLAMAPARSE_RESULT_TYPE},
+            filename=filename,
+            firm_id_meta=firm_id_meta
+        )
+    finally:
+        db.close()
 
 async def upload_pdf(workspace_id: str, background_tasks: BackgroundTasks, file: UploadFile, current_user: Optional[models.User], x_session_id: Optional[str], db: Session):
     firm_id_meta = "none"
