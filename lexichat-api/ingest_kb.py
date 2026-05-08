@@ -1,3 +1,5 @@
+from dependencies import safe_upsert
+from config.model_versions import PRODUCTION_PINECONE_NAMESPACE
 import os
 import sys
 import uuid
@@ -80,7 +82,7 @@ def ingest_knowledge_base(pdf_path: str, jurisdiction: str, doc_name: str):
     batch_size = 100
     for i in range(0, len(vectors_to_upsert), batch_size):
         batch = vectors_to_upsert[i:i + batch_size]
-        index.upsert(vectors=batch)
+        safe_upsert(index, batch, PRODUCTION_PINECONE_NAMESPACE)
         print(f"Upserted batch {i//batch_size + 1}/{(len(vectors_to_upsert) + batch_size - 1)//batch_size}")
         
     print(f"Successfully ingested {len(vectors_to_upsert)} chunks for {doc_name} into jurisdiction '{jurisdiction}'.")

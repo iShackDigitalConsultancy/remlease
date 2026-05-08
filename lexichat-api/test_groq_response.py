@@ -1,3 +1,4 @@
+from config.model_versions import GROQ_EXTRACTION_MODEL
 import os
 from groq import Groq
 from dotenv import load_dotenv
@@ -32,7 +33,7 @@ Output ONLY valid JSON matching this exact structure:
 If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Perform strict date arithmetic if the contract specifies a start date and term duration. Return ONLY the JSON object."""
 
 resp = groq_client.chat.completions.create(
-    model='llama-3.3-70b-versatile',
+    model=GROQ_EXTRACTION_MODEL,
     messages=[{'role': 'user', 'content': prompt}],
     temperature=0.0,
     max_tokens=2000

@@ -1,3 +1,4 @@
+from config.model_versions import GROQ_EXTRACTION_MODEL
 import os
 import json
 import re
@@ -5,12 +6,13 @@ from datetime import datetime
 from dependencies import UPLOAD_DIR, groq_client
 from services.map_reduce import batch_document
 
-def load_workspace_caches(workspace_id: str) -> dict:
+def load_workspace_caches(workspace_id: str, cache_dir: str = None) -> dict:
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     """Load all available cache files for a workspace. Returns dict with keys: expiries, fundamental_terms, audit"""
     caches = {}
     
     for report_type in ["extract_expiries", "fundamental_terms", "audit"]:
-        cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_{report_type}.json")
+        cache_path = os.path.join(cache_dir, f"{workspace_id}_{report_type}.json")
         if os.path.exists(cache_path):
             try:
                 with open(cache_path, "r") as f:
@@ -58,7 +60,7 @@ NEVER return 'Not specified' — if data is absent note which locations were sea
         
         try:
             resp = groq_client.chat.completions.create(
-                model='llama-3.3-70b-versatile',
+                model=GROQ_EXTRACTION_MODEL,
                 messages=[{'role': 'user', 'content': prompt}],
                 temperature=0.0,
                 max_tokens=4000
@@ -306,7 +308,7 @@ Output ONLY the Intelligence Report JSON. It must match exactly this schema:
     
     try:
         resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
+            model=GROQ_EXTRACTION_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=8000,
@@ -704,7 +706,8 @@ def validate_intelligence_report(
 
     return report
 
-async def generate_intelligence_report(workspace_id: str, doc_ids: list, filenames: list, full_text: str, db, doc_map: dict = None) -> dict:
+async def generate_intelligence_report(workspace_id: str, doc_ids: list, filenames: list, full_text: str, db, doc_map: dict = None, cache_dir: str = None) -> dict:
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     """Generate the full Intelligence Report"""
     # Load existing caches
     caches = load_workspace_caches(workspace_id)
@@ -725,7 +728,7 @@ async def generate_intelligence_report(workspace_id: str, doc_ids: list, filenam
     report["generated_at"] = datetime.utcnow().isoformat() + "Z"
     
     # Cache result to {workspace_id}_intelligence_report.json
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_intelligence_report.json")
+    cache_path = os.path.join(cache_dir, f"{workspace_id}_intelligence_report.json")
     with open(cache_path, "w") as f:
         json.dump(report, f, indent=2)
     

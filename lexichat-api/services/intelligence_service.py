@@ -1,9 +1,12 @@
+from config.model_versions import PRODUCTION_PINECONE_NAMESPACE
+from config.model_versions import VOYAGE_EMBEDDING_MODEL
+from config.model_versions import GROQ_EXTRACTION_MODEL
 import os
 import json
 import re
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from dependencies import UPLOAD_DIR, groq_client, index, vo
+from dependencies import safe_query, UPLOAD_DIR, groq_client, index, vo
 import models
 from sqlalchemy.orm import Session
 from fastapi import Depends, Header
@@ -32,7 +35,7 @@ async def cached_pipeline_stream(cache_path: str, force_refresh: bool, pipeline_
 
 
 def get_embedding(text: str):
-    return vo.embed([text], model="voyage-law-2").embeddings[0]
+    return vo.embed([text], model=VOYAGE_EMBEDDING_MODEL).embeddings[0]
 
 def analyze_document_brief(doc_id: str, filename: str, sample_text: str) -> dict:
     """Run a structured Groq extraction and return a JSON brief."""
@@ -55,7 +58,7 @@ def analyze_document_brief(doc_id: str, filename: str, sample_text: str) -> dict
     )
     try:
         resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
+            model=GROQ_EXTRACTION_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.1,
             max_tokens=800
@@ -77,10 +80,11 @@ def analyze_document_brief(doc_id: str, filename: str, sample_text: str) -> dict
         }
 
 
-def analyze_document_brief_background(doc_id: str, filename: str, sample_text: str):
+def analyze_document_brief_background(doc_id: str, filename: str, sample_text: str, cache_dir: str = None):
+    cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
     try:
         brief = analyze_document_brief(doc_id, filename, sample_text)
-        with open(os.path.join(UPLOAD_DIR, f"{doc_id}_brief.json"), "w") as f:
+        with open(os.path.join(cache_dir, f"{doc_id}_brief.json"), "w") as f:
             json.dump(brief, f)
     except Exception as e:
         print(f"Background brief extraction failed: {e}")
@@ -101,7 +105,7 @@ def get_document_brief(doc_id: str, current_user: Optional[models.User] = Depend
     if not doc:
         raise HTTPException(status_code=403, detail="Access denied")
         
-    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}_brief.json")
+    file_path = os.path.join(cache_dir, f"{doc_id}_brief.json")
     if not os.path.exists(file_path):
         return {"brief": None}
         
@@ -129,7 +133,7 @@ async def document_audit(payload, current_user: Optional[models.User] = Depends(
     doc_text = None
     for candidate_id in [payload.doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
         if not candidate_id: continue
-        file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+        file_path = os.path.join(cache_dir, f"{candidate_id}.md")
         if os.path.exists(file_path):
             try:
                 with open(file_path, "r") as f:
@@ -226,7 +230,7 @@ Output ONLY valid JSON matching this exact structure:
 
 Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON object."""
         resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
+            model=GROQ_EXTRACTION_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=2000
@@ -236,7 +240,7 @@ Use "PASS", "FAIL", or "REVIEW" for the status. Output nothing but the JSON obje
         return json.loads(raw)
 
     workspace_id = doc.workspace_id
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_audit.json")
+    cache_path = os.path.join(cache_dir, f"{workspace_id}_audit.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
@@ -267,7 +271,7 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
             
         for candidate_id in [doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
             if not candidate_id: continue
-            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            file_path = os.path.join(cache_dir, f"{candidate_id}.md")
             if os.path.exists(file_path):
                 try:
                     with open(file_path, "r") as f:
@@ -362,7 +366,7 @@ NEVER write 'filename.pdf' literally.
 NEVER invent a filename.
 Copy it exactly as it appears after 'DOCUMENT START:' in the input."""
         resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
+            model=GROQ_EXTRACTION_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=3000
@@ -371,7 +375,7 @@ Copy it exactly as it appears after 'DOCUMENT START:' in the input."""
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return json.loads(raw)
 
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_fundamental_terms.json")
+    cache_path = os.path.join(cache_dir, f"{workspace_id}_fundamental_terms.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
@@ -403,7 +407,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
         doc_text = None
         for candidate_id in [doc_id, getattr(doc, "pinecone_doc_id", None), getattr(doc, "id", None)]:
             if not candidate_id: continue
-            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            file_path = os.path.join(cache_dir, f"{candidate_id}.md")
             if os.path.exists(file_path):
                 try:
                     with open(file_path, "r") as f:
@@ -567,7 +571,7 @@ Output ONLY valid JSON matching this exact structure:
 
 If a date is vague or missing, make your best guess for the date format "YYYY-MM-DD". Perform strict date arithmetic if the contract specifies a start date and term duration. Return ONLY the JSON object."""
                     resp = groq_client.chat.completions.create(
-                        model='llama-3.3-70b-versatile',
+                        model=GROQ_EXTRACTION_MODEL,
                         messages=[{'role': 'user', 'content': prompt}],
                         temperature=0.0,
                         max_tokens=2000
@@ -710,7 +714,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                                 
                                         # 2. Check disk cache if not found in memory
                                         if not found_lease_date:
-                                            cache_file = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
+                                            cache_file = os.path.join(cache_dir, f"{workspace_id}_extract_expiries.json")
                                             if os.path.exists(cache_file):
                                                 try:
                                                     with open(cache_file, "r") as f:
@@ -869,7 +873,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
         # Consolidate all results
         from services.risk_engine import calculate_workspace_risk_scores
         
-        cache_file = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
+        cache_file = os.path.join(cache_dir, f"{workspace_id}_extract_expiries.json")
         if os.path.exists(cache_file):
             try:
                 with open(cache_file, "r") as f:
@@ -951,7 +955,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
         
         yield f"data: {json.dumps({'status': 'complete', 'data': final_data})}\n\n"
 
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_extract_expiries.json")
+    cache_path = os.path.join(cache_dir, f"{workspace_id}_extract_expiries.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, pipeline_wrapper()), media_type="text/event-stream")
 
 async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db)):
@@ -966,7 +970,7 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
     final_data = []
     
     for ws in workspaces:
-        cache_path = os.path.join(UPLOAD_DIR, f"{ws.id}_extract_expiries.json")
+        cache_path = os.path.join(cache_dir, f"{ws.id}_extract_expiries.json")
         ws_summary = {
             "workspace_id": str(ws.id),
             "workspace_name": ws.name,
@@ -1095,7 +1099,7 @@ async def document_compare(payload, current_user: Optional[models.User] = Depend
         doc_text = None
         for candidate_id in [doc_id, doc.pinecone_doc_id, doc.id]:
             if not candidate_id: continue
-            file_path = os.path.join(UPLOAD_DIR, f"{candidate_id}.md")
+            file_path = os.path.join(cache_dir, f"{candidate_id}.md")
             if os.path.exists(file_path):
                 try:
                     with open(file_path, "r") as f:
@@ -1214,7 +1218,7 @@ JSON SCHEMA REQUIREMENT:
 
 Return ONLY the raw JSON object. Do not wrap in markdown code blocks."""
         resp = groq_client.chat.completions.create(
-            model='llama-3.3-70b-versatile',
+            model=GROQ_EXTRACTION_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=4000
@@ -1223,7 +1227,7 @@ Return ONLY the raw JSON object. Do not wrap in markdown code blocks."""
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         return json.loads(raw)
 
-    cache_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_compare.json")
+    cache_path = os.path.join(cache_dir, f"{workspace_id}_compare.json")
     return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, run_feature_gated_pipeline(full_text, map_task, reduce_task, legacy_op)), media_type="text/event-stream")
 
 
@@ -1279,21 +1283,11 @@ async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(g
         if request.is_firm_search:
             if not current_user or not current_user.firm_id:
                 raise HTTPException(status_code=403, detail="Firm Precedent Search requires a registered firm account.")
-            firm_response = index.query(
-                vector=query_vec,
-                top_k=20,
-                include_metadata=True,
-                filter={"firm_id": {"$eq": current_user.firm_id}}
-            )
+            firm_response = safe_query(index, query_vec, 20, True, {"firm_id": {"$eq": current_user.firm_id}}, PRODUCTION_PINECONE_NAMESPACE)
             matches.extend(firm_response.get('matches', []))
         else:
             for doc_id in request.doc_ids:
-                query_response = index.query(
-                    vector=query_vec,
-                    top_k=chunks_per_doc,
-                    include_metadata=True,
-                    filter={"doc_id": {"$eq": doc_id}}
-                )
+                query_response = safe_query(index, query_vec, chunks_per_doc, True, {"doc_id": {"$eq": doc_id}}, PRODUCTION_PINECONE_NAMESPACE)
                 matches.extend(query_response.get('matches', []))
             
             # Regional Knowledge Base Sweeps (The Law)
@@ -1321,7 +1315,7 @@ async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(g
             page_one_anchors = []
             for doc_id in request.doc_ids:
                 try:
-                    md_path = os.path.join(UPLOAD_DIR, f"{doc_id}.md")
+                    md_path = os.path.join(cache_dir, f"{doc_id}.md")
                     if os.path.exists(md_path):
                         with open(md_path, "r") as f:
                             p1_text = f.read(1500) # Load the absolutely critical opening definitions
@@ -1368,7 +1362,7 @@ async def chat_with_pdf(request, current_user: Optional[models.User] = Depends(g
         
         def generate():
             response = groq_client.chat.completions.create(
-                model='llama-3.3-70b-versatile', # Massive 70B reasoning engine, 30,000 TPM limit
+                model=GROQ_EXTRACTION_MODEL, # Massive 70B reasoning engine, 30,000 TPM limit
                 messages=[
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': request.query}
