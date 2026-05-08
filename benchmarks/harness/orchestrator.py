@@ -29,13 +29,32 @@ def process_documents(input_dir: str, run_dir: str, db, manifest_builder, doc_li
         
     docs_processed = 0
     docs_failed = 0
+    from models import Workspace, WorkspaceDocument
+    
     workspace_id = str(uuid.uuid4())
+    firm_id_meta = "benchmark"
+    
+    # Create Workspace
+    db_workspace = Workspace(id=workspace_id, name="Benchmark Run", firm_id=firm_id_meta)
+    db.add(db_workspace)
+    db.commit()
     
     docs_dir = os.path.join(run_dir, "docs")
     os.makedirs(docs_dir, exist_ok=True)
     
     for filename in pdf_files:
         doc_id = str(uuid.uuid4())
+        
+        # Create WorkspaceDocument
+        db_doc = WorkspaceDocument(
+            id=str(uuid.uuid4()),
+            workspace_id=workspace_id,
+            pinecone_doc_id=doc_id,
+            filename=filename
+        )
+        db.add(db_doc)
+        db.commit()
+        
         doc_folder = os.path.join(docs_dir, doc_id)
         os.makedirs(doc_folder, exist_ok=True)
         
