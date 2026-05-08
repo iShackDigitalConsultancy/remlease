@@ -103,9 +103,7 @@ def process_documents(input_dir: str, run_dir: str, db, manifest_builder, doc_li
             payload = DummyPayload(doc_id=doc_id)
             payload.doc_ids = [doc_id]
             
-            import services.intelligence_service
-            services.intelligence_service.cache_dir = doc_folder
-            asyncio.run(extract_expiries(payload, current_user=DummyUser(), db=db))
+            asyncio.run(extract_expiries(payload, current_user=DummyUser(), db=db, cache_dir=doc_folder))
             doc_status.stages.expiries_seconds = time.time() - start_time
             
             # 3. Intelligence Report
