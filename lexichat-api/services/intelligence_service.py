@@ -853,6 +853,93 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                         exp["doc_type"] = "Lease Agreement"
                                         
                                     final_expiries.append(exp)
+                                
+                                # Normalize variant field names to 
+                                # canonical schema
+                                for exp in expiries:
+                                    # Commencement date variants
+                                    if not exp.get("raw_commencement_date"):
+                                        exp["raw_commencement_date"] = (
+                                            exp.get("legal_commencement_date")
+                                            or exp.get("commencement_date")
+                                            or None
+                                        )
+                                    
+                                    # Expiry date — may already be set
+                                    if not exp.get("expiry_date"):
+                                        exp["expiry_date"] = (
+                                            exp.get("raw_expiry_date")
+                                            or None
+                                        )
+                                    
+                                    # Duration years
+                                    if not exp.get("duration_years"):
+                                        ev = exp.get("duration_years_evidence")
+                                        if ev and isinstance(ev, dict):
+                                            exp["duration_years"] = ev.get(
+                                                "value")
+                                    
+                                    # Notice months — AI sometimes sets
+                                    # null despite having evidence
+                                    if not exp.get("notice_min_months"):
+                                        ev = exp.get(
+                                            "notice_min_months_evidence")
+                                        if ev and isinstance(ev, dict):
+                                            val = ev.get("value")
+                                            if val and isinstance(val, int) \
+                                               and val > 0:
+                                                exp["notice_min_months"] = val
+                                    
+                                    if not exp.get("notice_max_months"):
+                                        ev = exp.get(
+                                            "notice_max_months_evidence")
+                                        if ev and isinstance(ev, dict):
+                                            val = ev.get("value")
+                                            if val and isinstance(val, int) \
+                                               and val > 0:
+                                                exp["notice_max_months"] = val
+                                    
+                                    # Renewal type normalization
+                                    rt = exp.get("renewal_type")
+                                    if rt:
+                                        # Map variant values to canonical
+                                        rt_map = {
+                                            "no_renewal_right": "none",
+                                            "automatic_renewal_with_opt_out": 
+                                                "opt_out",
+                                            "manual_renewal": "manual",
+                                        }
+                                        if rt in rt_map:
+                                            exp["renewal_type"] = rt_map[rt]
+                                    
+                                    # Beneficial occupation
+                                    if not exp.get(
+                                        "beneficial_occupation_date"):
+                                        ev = exp.get(
+                                            "beneficial_occupation_date_evidence")
+                                        if ev and isinstance(ev, dict):
+                                            val = ev.get("value")
+                                            # Only use if it looks like a date
+                                            if val and len(str(val)) == 10 \
+                                               and "-" in str(val):
+                                                exp["beneficial_occupation_date"]\
+                                                    = val
+                                    
+                                    # Clause confidence
+                                    if not exp.get("clause_confidence"):
+                                        ev = exp.get(
+                                            "renewal_type_evidence")
+                                        if ev and isinstance(ev, dict):
+                                            exp["clause_confidence"] = \
+                                                ev.get("confidence", 0.0)
+                                    
+                                    # Renewal clause text
+                                    if not exp.get("renewal_clause_text"):
+                                        ev = exp.get(
+                                            "renewal_type_evidence")
+                                        if ev and isinstance(ev, dict):
+                                            exp["renewal_clause_text"] = \
+                                                ev.get("source_text")
 
                             else:
                                 msg = data_obj.get("message", "")
