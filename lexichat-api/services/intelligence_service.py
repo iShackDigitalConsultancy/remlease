@@ -1138,7 +1138,16 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                     ws_summary["documents"].append({
                         "filename": doc_name,
                         "doc_type": doc_type,
-                        "commencement_date": exp.get("legal_commencement_date") or exp.get("commencement_date") or exp.get("raw_commencement_date"),
+                        "commencement_date": (
+                            exp.get("raw_commencement_date")
+                            or exp.get("legal_commencement_date")
+                            or exp.get("commencement_date")
+                        ),
+                        "commencement_source": (
+                            exp.get("raw_commencement_date_source")
+                            or exp.get("commencement_source")
+                            or "ai_extracted"
+                        ),
                         "expiry_date": exp.get("deterministic_expiry_date") or exp.get("expiry_date") or exp.get("raw_expiry_date"),
                         "renewal_deadline": exp.get("deterministic_renewal_notice_latest") or exp.get("renewal_notice_latest") or exp.get("renewal_deadline"),
                         "renewal_option_period": exp.get("renewal_option_period"),
