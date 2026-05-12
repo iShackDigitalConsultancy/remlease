@@ -857,7 +857,6 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                                 # Normalize variant field names to 
                                 # canonical schema
                                 for exp in expiries:
-                                    exp["__DEBUG_NORMALIZATION_RAN"] = True
                                     # Commencement date variants
                                     if not exp.get("raw_commencement_date"):
                                         exp["raw_commencement_date"] = (
