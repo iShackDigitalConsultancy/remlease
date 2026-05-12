@@ -373,6 +373,87 @@ def trigger_expiry_alerts(x_cron_secret: Optional[str] = Header(None), db: Sessi
         raise HTTPException(status_code=403, detail="Forbidden cron access")
     return notification_service.trigger_expiry_alerts(db)
 
+from fastapi import Body
+
+@app.post("/api/workspace/{workspace_id}/document/{document_id}/overrides")
+async def save_override(
+    workspace_id: str,
+    document_id: str,
+    payload: dict = Body(...),
+    current_user = Depends(
+        get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    import json
+    from datetime import datetime
+    
+    field = payload.get("field_name")
+    value = payload.get("value")
+    reason = payload.get("reason", "")
+    
+    allowed = {
+        "commencement_date", "expiry_date",
+        "renewal_type", "renewal_deadline",
+        "notice_min_months", "notice_max_months",
+        "deposit", "monthly_rental",
+        "escalation_rate", "franchise_fee_pct",
+        "franchise_term_years", 
+        "franchise_renewal"
+    }
+    
+    if field not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Field {field} not allowed")
+    
+    # Load or create overrides file
+    override_path = os.path.join(
+        UPLOAD_DIR,
+        f"{workspace_id}_overrides.json")
+    
+    overrides = {}
+    if os.path.exists(override_path):
+        with open(override_path) as f:
+            overrides = json.load(f)
+    
+    if document_id not in overrides:
+        overrides[document_id] = {}
+    
+    overrides[document_id][field] = {
+        "value": value,
+        "reason": reason,
+        "source": "manual_user_verified",
+        "confidence": 1.0,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+        "updated_by": getattr(current_user, 'email', 'unknown')
+    }
+    
+    with open(override_path, "w") as f:
+        json.dump(overrides, f, indent=2)
+    
+    return {"status": "saved", "field": field}
+
+
+@app.get("/api/workspace/{workspace_id}/overrides")
+async def get_overrides(
+    workspace_id: str,
+    current_user = Depends(
+        get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    import json
+    override_path = os.path.join(
+        UPLOAD_DIR,
+        f"{workspace_id}_overrides.json")
+    
+    if not os.path.exists(override_path):
+        return {"overrides": {}}
+    
+    with open(override_path) as f:
+        overrides = json.load(f)
+    
+    return {"overrides": overrides}
+
 from models import PDFExportPayload
 
 @app.post("/api/export/pdf")

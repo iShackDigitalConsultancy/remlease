@@ -1085,8 +1085,33 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                 ws_summary["property_location"] = doc_context.get("location")
                 ws_summary["parties"] = doc_context.get("parties", [])
                 
+                override_path = os.path.join(cache_dir, f"{ws.id}_overrides.json")
+                overrides = {}
+                if os.path.exists(override_path):
+                    try:
+                        with open(override_path, "r") as f:
+                            overrides = json.load(f)
+                    except Exception:
+                        pass
+                
                 expiries = cached.get("expiries", [])
                 for exp in expiries:
+                    doc_id = exp.get("pinecone_doc_id") or exp.get("document_id")
+                    if doc_id and doc_id in overrides:
+                        doc_overrides = overrides[doc_id]
+                        for field, override in doc_overrides.items():
+                            # Map override field to cache field
+                            field_map = {
+                                "commencement_date": "raw_commencement_date",
+                                "expiry_date": "expiry_date",
+                                "renewal_type": "renewal_type",
+                                "notice_min_months": "notice_min_months",
+                                "notice_max_months": "notice_max_months",
+                            }
+                            cache_field = field_map.get(field, field)
+                            exp[cache_field] = override["value"]
+                            exp[f"{cache_field}_source"] = "manual_user_verified"
+                            
                     doc_name = str(exp.get("document", ""))
                     # Prefer AI-extracted doc_type from cache
                     ai_doc_type = exp.get("doc_type")
