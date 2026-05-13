@@ -15,6 +15,86 @@ from services.map_reduce import run_feature_gated_pipeline
 from auth import get_current_user_optional
 from database import get_db
 
+def harvest_annexure_orphans(text: str) -> str:
+    import re
+    try:
+        if "ANNEXURE A" not in text or "FINANCIAL AND OTHER TERMS" not in text:
+            return text
+            
+        lines = text.split("\n")
+        
+        target_idx = -1
+        for i, line in enumerate(lines):
+            if "FINANCIAL AND OTHER TERMS" in line:
+                target_idx = i
+                
+        if target_idx == -1:
+            return text
+            
+        last_item_idx = target_idx
+        for i in range(target_idx, min(target_idx + 150, len(lines))):
+            if "ANNEXURE B" in lines[i] or "SURETYSHIP" in lines[i]:
+                break
+            if re.match(r'^\d+\.\s*$', lines[i].strip()) or re.match(r'^\d+\.', lines[i].strip()):
+                last_item_idx = i
+                
+        scan_start = last_item_idx
+        scan_end = min(last_item_idx + 80, len(lines))
+        
+        dates = []
+        address_fragments = []
+        
+        month_pattern = r'^\s*\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s*$'
+        
+        first_date_idx = -1
+        
+        for i in range(scan_start, scan_end):
+            line = lines[i]
+            
+            if re.match(month_pattern, line, re.IGNORECASE):
+                if i + 1 < len(lines):
+                    next_line = lines[i+1]
+                    if re.match(r'^\s*\d{2}\s*$', next_line):
+                        if first_date_idx == -1:
+                            first_date_idx = i
+                        day_month = line.strip()
+                        year_frag = next_line.strip()
+                        dates.append(f"{day_month} 20{year_frag}")
+                        
+            line_str = line.strip()
+            if not line_str:
+                continue
+                
+            if re.search(r'Shop\s*\d+', line_str, re.IGNORECASE) or \
+               re.match(r'^\s*\d+\s+\w+.*(?:Avenue|Road|Street|Drive)', line_str, re.IGNORECASE):
+                if line_str not in address_fragments:
+                    address_fragments.append(line_str)
+                    
+        if first_date_idx != -1 and first_date_idx > scan_start:
+            prev_line = lines[first_date_idx - 1].strip()
+            if prev_line and not re.match(r'^\d+$', prev_line) and prev_line not in address_fragments:
+                address_fragments.insert(0, prev_line)
+                
+        if not dates and not address_fragments:
+            return text
+            
+        date_1 = dates[0] if len(dates) > 0 else "Not found"
+        date_2 = dates[1] if len(dates) > 1 else "Not found"
+        address_str = ", ".join(address_fragments) if address_fragments else "Not found"
+        
+        injection = (
+            "\n\n--- ANNEXURE A FILLED FIELDS (HARVESTED) ---\n"
+            f"Commencement Date (Item 7): {date_1}\n"
+            f"Opening Date (Item 8): {date_2}\n"
+            f"Premises Address: {address_str}\n"
+            "--- END HARVESTED FIELDS ---\n"
+        )
+        
+        lines.insert(target_idx + 1, injection)
+        return "\n".join(lines)
+    except Exception:
+        return text
+
 async def cached_pipeline_stream(
     cache_path: str,
     force_refresh: bool,
@@ -348,6 +428,7 @@ async def extract_timeline(payload, current_user: Optional[models.User] = Depend
                 try:
                     with open(file_path, "r") as f:
                         doc_text = f.read()
+                    doc_text = harvest_annexure_orphans(doc_text)
                     full_text += f"\n--- DOCUMENT START: {doc.filename} ---\n{doc_text}\n"
                     break
                 except Exception as e:
@@ -485,6 +566,7 @@ async def extract_expiries(payload, current_user: Optional[models.User] = Depend
                 try:
                     with open(file_path, "r") as f:
                         doc_text = f.read()
+                    doc_text = harvest_annexure_orphans(doc_text)
                     break
                 except Exception as e:
                     print(f"Failed to read {file_path}: {e}")
