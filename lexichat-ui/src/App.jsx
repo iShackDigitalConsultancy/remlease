@@ -150,6 +150,8 @@ function InnerApp() {
   const [editValue, setEditValue] = useState('');
   const [editReason, setEditReason] = useState('');
   const [savingOverride, setSavingOverride] = useState(false);
+  const [showEditLog, setShowEditLog] = useState(false);
+  const [editLog, setEditLog] = useState([]);
 
   const [isGeneratingIntelligence, setIsGeneratingIntelligence] = useState(false);
   const [intelligenceReport, setIntelligenceReport] = useState(null);
@@ -776,6 +778,27 @@ function InnerApp() {
     }
   };
 
+  const fetchEditLog = async () => {
+    try {
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else if (sessionId) {
+        headers['x-session-id'] = sessionId;
+      }
+      const res = await fetch(
+        `${API_BASE}/workspace/${activeCase.id}/override-log`,
+        { headers }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setEditLog(data.log || []);
+        setShowEditLog(true);
+      }
+    } catch (err) {
+      console.error('Failed to load log', err);
+    }
+  };
 
   const executeExpiryExtraction = async (forceRefresh = false) => {
     const activeDocIds = library.map(d => d.id);
@@ -2157,6 +2180,12 @@ END:VCALENDAR`;
                 <Calendar className="text-brand-accent" size={18} /> Global Expiry & Renewal Intelligence
               </h2>
               <div className="flex items-center gap-3">
+                <button
+                  onClick={fetchEditLog}
+                  className="flex items-center gap-1 text-xs text-slate-500 hover:text-purple-600"
+                >
+                  <Clock size={12} /> Edit Log
+                </button>
                 <button onClick={() => executeExpiryExtraction(true)} disabled={isExtractingExpiries} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isExtractingExpiries ? "Scanning..." : "Refresh"}</button>
                 <button onClick={() => handleExportPDF('expiries', expiryData, activeCase?.name, expiryData?.expiries?.map(e => e.document) || [])} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
                 <button 
@@ -2172,6 +2201,50 @@ END:VCALENDAR`;
                 </button>
               </div>
             </div>
+            
+            {showEditLog && (
+              <div className="mx-6 mt-4 mb-2 p-3 bg-purple-50 border border-purple-200 rounded-xl shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold text-purple-700">
+                    Override Edit Log
+                  </p>
+                  <button
+                    onClick={() => setShowEditLog(false)}
+                    className="text-purple-400 hover:text-purple-600"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                {editLog.length === 0 ? (
+                  <p className="text-xs text-purple-500 italic">
+                    No manual edits recorded yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {editLog.map((entry, i) => (
+                      <div key={i} className="text-xs border-b border-purple-100 pb-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-purple-800">
+                            {entry.field_name?.replace(/_/g, ' ')?.toUpperCase()}
+                          </span>
+                          <span className="text-[10px] text-purple-500">
+                            {entry.updated_at 
+                              ? new Date(entry.updated_at).toLocaleDateString() 
+                              : ''}
+                          </span>
+                        </div>
+                        <p className="text-purple-700 font-semibold">
+                          → {entry.value}
+                        </p>
+                        <p className="text-purple-500">
+                          {entry.reason} — {entry.updated_by}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             
             <div id="expiry-modal-content" className="print-target flex-1 overflow-y-auto bg-white p-6 md:p-8">
               {isExtractingExpiries ? (

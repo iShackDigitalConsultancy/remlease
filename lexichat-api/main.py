@@ -375,6 +375,44 @@ def trigger_expiry_alerts(x_cron_secret: Optional[str] = Header(None), db: Sessi
 
 from fastapi import Body
 
+@app.get("/api/workspace/{workspace_id}/override-log")
+async def get_override_log(
+    workspace_id: str,
+    current_user = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    import json
+    override_path = os.path.join(
+        UPLOAD_DIR,
+        f"{workspace_id}_overrides.json")
+    
+    if not os.path.exists(override_path):
+        return {"log": []}
+    
+    with open(override_path) as f:
+        overrides = json.load(f)
+    
+    # Build flat log from overrides
+    log = []
+    for doc_id, fields in overrides.items():
+        for field_name, entry in fields.items():
+            log.append({
+                "document_id": doc_id,
+                "field_name": field_name,
+                "value": entry.get("value"),
+                "reason": entry.get("reason"),
+                "updated_at": entry.get("updated_at"),
+                "updated_by": entry.get("updated_by"),
+                "source": entry.get("source")
+            })
+    
+    # Sort by most recent first
+    log.sort(
+        key=lambda x: x.get("updated_at") or "", 
+        reverse=True)
+    
+    return {"log": log}
+
 @app.post("/api/workspace/{workspace_id}/document/{document_id}/overrides")
 async def save_override(
     workspace_id: str,
@@ -416,16 +454,27 @@ async def save_override(
         with open(override_path) as f:
             overrides = json.load(f)
     
+    existing = overrides.get(document_id, {}).get(field, {})
+    history = existing.get("history", [])
+    if existing.get("value"):
+        history.append({
+            "previous_value": existing["value"],
+            "changed_at": existing.get("updated_at"),
+            "changed_by": existing.get("updated_by"),
+            "reason": existing.get("reason")
+        })
+
     if document_id not in overrides:
         overrides[document_id] = {}
-    
+
     overrides[document_id][field] = {
         "value": value,
         "reason": reason,
         "source": "manual_user_verified",
         "confidence": 1.0,
         "updated_at": datetime.utcnow().isoformat() + "Z",
-        "updated_by": getattr(current_user, 'email', 'unknown')
+        "updated_by": getattr(current_user, 'email', 'unknown'),
+        "history": history
     }
     
     with open(override_path, "w") as f:
