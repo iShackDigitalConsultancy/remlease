@@ -15,23 +15,91 @@ from services.map_reduce import run_feature_gated_pipeline
 from auth import get_current_user_optional
 from database import get_db
 
-async def cached_pipeline_stream(cache_path: str, force_refresh: bool, pipeline_gen):
-    if not force_refresh and os.path.exists(cache_path):
+async def cached_pipeline_stream(
+    cache_path: str,
+    force_refresh: bool,
+    pipeline_gen,
+    workspace_id: str = None
+):
+    def apply_overrides(data):
+        if not workspace_id:
+            return data
+        from dependencies import UPLOAD_DIR
+        override_path = os.path.join(
+            UPLOAD_DIR,
+            f"{workspace_id}_overrides.json")
+        if not os.path.exists(override_path):
+            return data
+        try:
+            with open(override_path) as f:
+                overrides = json.load(f)
+            expiries = data.get("expiries", [])
+            for exp in expiries:
+                doc_id = (
+                    exp.get("pinecone_doc_id")
+                    or exp.get("document_id")
+                )
+                if doc_id and \
+                   doc_id in overrides:
+                    doc_ov = overrides[doc_id]
+                    field_map = {
+                        "commencement_date":
+                            "raw_commencement_date",
+                        "expiry_date":
+                            "expiry_date",
+                        "renewal_type":
+                            "renewal_type",
+                        "notice_min_months":
+                            "notice_min_months",
+                        "notice_max_months":
+                            "notice_max_months",
+                        "renewal_deadline":
+                            "renewal_deadline",
+                    }
+                    for field, ov in \
+                        doc_ov.items():
+                        cf = field_map.get(
+                            field, field)
+                        exp[cf] = ov["value"]
+                        exp[f"{cf}_source"] = \
+                            "manual_user_verified"
+                    # Set commencement_source
+                    if "commencement_date" \
+                       in doc_ov:
+                        exp["commencement_source"]\
+                            = "manual_user_verified"
+                        exp["commencement_date"]\
+                            = doc_ov[
+                            "commencement_date"
+                            ]["value"]
+        except Exception as e:
+            print(f"Override apply: {e}")
+        return data
+
+    if not force_refresh and \
+       os.path.exists(cache_path):
         with open(cache_path, "r") as f:
             cached = json.load(f)
+        # Apply overrides to cached data
+        cached = apply_overrides(cached)
         yield f"data: {json.dumps({'status': 'complete', 'data': cached})}\n\n"
         return
-        
+
     async for chunk in pipeline_gen:
-        yield chunk
+        # Apply overrides to fresh data too
         if chunk.startswith("data: "):
             try:
-                data_obj = json.loads(chunk[6:])
-                if data_obj.get("status") == "complete":
+                obj = json.loads(chunk[6:])
+                if obj.get("status") == "complete":
+                    obj["data"] = apply_overrides(obj.get("data", {}))
+                    yield f"data: {json.dumps(obj)}\n\n"
+                    # Save updated cache
                     with open(cache_path, "w") as f:
-                        json.dump(data_obj.get("data"), f)
+                        json.dump(obj.get("data"), f)
+                    continue
             except Exception:
                 pass
+        yield chunk
 
 
 def get_embedding(text: str):
@@ -978,57 +1046,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
             except:
                 pass
 
-        # Apply manual overrides
-        override_path = os.path.join(
-            UPLOAD_DIR,
-            f"{workspace_id}_overrides.json")
-        if os.path.exists(override_path):
-            try:
-                with open(override_path) as f:
-                    overrides = json.load(f)
-                for exp in final_expiries:
-                    doc_id = (
-                        exp.get("pinecone_doc_id")
-                        or exp.get("document_id")
-                    )
-                    if doc_id and doc_id in overrides:
-                        doc_ov = overrides[doc_id]
-                        field_map = {
-                            "commencement_date": 
-                                "raw_commencement_date",
-                            "expiry_date": 
-                                "expiry_date",
-                            "renewal_type": 
-                                "renewal_type",
-                            "notice_min_months":
-                                "notice_min_months",
-                            "notice_max_months":
-                                "notice_max_months",
-                            "renewal_deadline":
-                                "renewal_deadline",
-                        }
-                        for field, ov in \
-                            doc_ov.items():
-                            cache_field = \
-                                field_map.get(
-                                    field, field)
-                            exp[cache_field] = \
-                                ov["value"]
-                            exp[f"{cache_field}_source"]\
-                                = "manual_user_verified"
-            except Exception as e:
-                print(f"Override injection: {e}")
 
-        for exp in final_expiries:
-            if not exp.get("commencement_source"):
-                if exp.get(
-                    "raw_commencement_date_source"):
-                    exp["commencement_source"] = \
-                        exp["raw_commencement_date_source"]
-                else:
-                    exp["commencement_source"] = \
-                        "ai_extracted"
-                
         ws_summary_docs = []
         for exp in final_expiries:
             ws_summary_docs.append({
@@ -1099,7 +1117,7 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
         yield f"data: {json.dumps({'status': 'complete', 'data': final_data})}\n\n"
 
     cache_path = os.path.join(cache_dir, f"{workspace_id}_extract_expiries.json")
-    return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, pipeline_wrapper()), media_type="text/event-stream")
+    return StreamingResponse(cached_pipeline_stream(cache_path, payload.force_refresh, pipeline_wrapper(), workspace_id=str(workspace_id)), media_type="text/event-stream")
 
 async def portfolio_overview(current_user: Optional[models.User] = Depends(get_current_user_optional), x_session_id: Optional[str] = Header(None), db: Session = Depends(get_db), cache_dir: str = None):
     cache_dir = UPLOAD_DIR if cache_dir is None else cache_dir
