@@ -9,7 +9,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 import { 
   FileText, UploadCloud, MessageSquare, Send, CheckCircle2, 
-  Loader2, Scale, BookOpen, Clock, ChevronRight, ChevronDown, ChevronUp, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare, Calendar, CalendarPlus, Database, BellRing, Layers, ExternalLink, Printer, RefreshCw, MapPin
+  Loader2, Scale, BookOpen, Clock, ChevronRight, ChevronDown, ChevronUp, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare, Calendar, CalendarPlus, Database, BellRing, Layers, ExternalLink, Printer, RefreshCw, MapPin, Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
@@ -145,6 +145,11 @@ function InnerApp() {
   const [showExpiryModal, setShowExpiryModal] = useState(false);
   const [expiryData, setExpiryData] = useState(null);
   const [isExtractingExpiries, setIsExtractingExpiries] = useState(false);
+
+  const [editingField, setEditingField] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const [editReason, setEditReason] = useState('');
+  const [savingOverride, setSavingOverride] = useState(false);
 
   const [isGeneratingIntelligence, setIsGeneratingIntelligence] = useState(false);
   const [intelligenceReport, setIntelligenceReport] = useState(null);
@@ -728,6 +733,46 @@ function InnerApp() {
     } finally {
       setIsAuditing(false);
       setPipelineProgress("");
+    }
+  };
+
+  const saveOverride = async (documentId, fieldName) => {
+    if (!editValue.trim()) return;
+    setSavingOverride(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else if (sessionId) {
+        headers['x-session-id'] = sessionId;
+      }
+      const doc = library.find(d => d.name === documentId || d.filename === documentId || d.id === documentId);
+      const docIdToUse = doc ? doc.id : documentId;
+      const res = await fetch(
+        `${API_BASE}/workspace/${activeCase.id}/document/${docIdToUse}/overrides`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            field_name: fieldName,
+            value: editValue,
+            reason: editReason || 'Manual correction'
+          })
+        }
+      );
+      if (!res.ok) throw new Error('Failed to save override');
+      
+      setEditingField(null);
+      setEditValue('');
+      setEditReason('');
+      
+      executeExpiryExtraction(false);
+    } catch (err) {
+      alert('Failed to save: ' + err.message);
+    } finally {
+      setSavingOverride(false);
     }
   };
 
@@ -2182,11 +2227,67 @@ END:VCALENDAR`;
                         
                         <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
                            <div className="lg:col-span-1 space-y-4">
-                             <div>
-                                <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Commencement Date</span>
-                                <div className="text-md font-bold text-slate-700 flex items-center gap-2">
-                                  <Clock size={16} className="opacity-70"/> {exp.commencement_date || "Not Specified"}
-                                </div>
+                             {/* Commencement Date */}
+                             <div className="flex items-center justify-between">
+                               <div>
+                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Commencement Date</p>
+                                 {editingField === `${exp.pinecone_doc_id || exp.document_id}_commencement_date` ? (
+                                   <div className="flex flex-col gap-1 mt-1">
+                                     <input
+                                       type="date"
+                                       value={editValue}
+                                       onChange={(e) => setEditValue(e.target.value)}
+                                       className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
+                                     />
+                                     <input
+                                       type="text"
+                                       placeholder="Reason for change"
+                                       value={editReason}
+                                       onChange={(e) => setEditReason(e.target.value)}
+                                       className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
+                                     />
+                                     <div className="flex gap-1">
+                                       <button
+                                         onClick={() => saveOverride((exp.pinecone_doc_id || exp.document_id), 'commencement_date')}
+                                         disabled={savingOverride}
+                                         className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded hover:bg-green-700"
+                                       >
+                                         {savingOverride ? 'Saving...' : 'Save'}
+                                       </button>
+                                       <button
+                                         onClick={() => {
+                                           setEditingField(null);
+                                           setEditValue('');
+                                           setEditReason('');
+                                         }}
+                                         className="text-[10px] bg-slate-300 text-slate-700 px-2 py-0.5 rounded hover:bg-slate-400"
+                                       >
+                                         Cancel
+                                       </button>
+                                     </div>
+                                   </div>
+                                 ) : (
+                                   <div className="flex items-center gap-1">
+                                     <p className="text-md font-bold text-slate-700 flex items-center gap-2">
+                                       <Clock size={16} className="opacity-70"/> {exp.commencement_date || <span className="text-slate-400 italic text-xs">Not extracted</span>}
+                                     </p>
+                                     {exp.commencement_source === 'manual_user_verified' && (
+                                       <span className="text-[9px] bg-green-100 text-green-700 px-1 rounded ml-1">✓ Verified</span>
+                                     )}
+                                   </div>
+                                 )}
+                               </div>
+                               <button
+                                 onClick={() => {
+                                   setEditingField(`${exp.pinecone_doc_id || exp.document_id}_commencement_date`);
+                                   setEditValue(exp.commencement_date || '');
+                                   setEditReason('');
+                                 }}
+                                 className="text-slate-400 hover:text-purple-600 p-1"
+                                 title="Edit this field"
+                               >
+                                 <Pencil size={12} />
+                               </button>
                              </div>
                              
                              {exp.beneficial_occupation_date && exp.beneficial_occupation_date !== 'null' && (
@@ -2200,26 +2301,199 @@ END:VCALENDAR`;
                               </div>
                              )}
 
+                             {/* Expiry Date */}
                              <div className="pt-2 border-t border-slate-100">
-                                <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Expiration Date</span>
-                                <div className="text-xl font-black text-brand-accent flex items-center gap-2">
-                                  <Clock size={18} className="opacity-80"/> {exp.expiry_date || "Not Specified"}
-                                </div>
+                               <div className="flex items-center justify-between">
+                                 <div>
+                                   <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Expiration Date</p>
+                                   {editingField === `${exp.pinecone_doc_id || exp.document_id}_expiry_date` ? (
+                                     <div className="flex flex-col gap-1 mt-1">
+                                       <input
+                                         type="date"
+                                         value={editValue}
+                                         onChange={(e) => setEditValue(e.target.value)}
+                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
+                                       />
+                                       <input
+                                         type="text"
+                                         placeholder="Reason for change"
+                                         value={editReason}
+                                         onChange={(e) => setEditReason(e.target.value)}
+                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
+                                       />
+                                       <div className="flex gap-1">
+                                         <button
+                                           onClick={() => saveOverride((exp.pinecone_doc_id || exp.document_id), 'expiry_date')}
+                                           disabled={savingOverride}
+                                           className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded hover:bg-green-700"
+                                         >
+                                           {savingOverride ? 'Saving...' : 'Save'}
+                                         </button>
+                                         <button
+                                           onClick={() => {
+                                             setEditingField(null);
+                                             setEditValue('');
+                                             setEditReason('');
+                                           }}
+                                           className="text-[10px] bg-slate-300 text-slate-700 px-2 py-0.5 rounded hover:bg-slate-400"
+                                         >
+                                           Cancel
+                                         </button>
+                                       </div>
+                                     </div>
+                                   ) : (
+                                     <div className="flex items-center gap-1">
+                                       <p className="text-xl font-black text-brand-accent flex items-center gap-2">
+                                         <Clock size={18} className="opacity-80"/> {exp.expiry_date || <span className="text-slate-400 italic text-xs">Not extracted</span>}
+                                       </p>
+                                       {exp.expiry_date_source === 'manual_user_verified' && (
+                                         <span className="text-[9px] bg-green-100 text-green-700 px-1 rounded ml-1">✓ Verified</span>
+                                       )}
+                                     </div>
+                                   )}
+                                 </div>
+                                 <button
+                                   onClick={() => {
+                                     setEditingField(`${exp.pinecone_doc_id || exp.document_id}_expiry_date`);
+                                     setEditValue(exp.expiry_date || '');
+                                     setEditReason('');
+                                   }}
+                                   className="text-slate-400 hover:text-purple-600 p-1"
+                                   title="Edit this field"
+                                 >
+                                   <Pencil size={12} />
+                                 </button>
+                               </div>
                              </div>
 
-                             {exp.renewal_option_period && exp.renewal_option_period !== 'null' && (
-                              <div className="pt-2 border-t border-slate-100">
-                                <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Renewal Option</p>
-                                <p className="text-sm font-medium text-slate-800">
-                                  {exp.renewal_option_period}
-                                </p>
-                              </div>
-                             )}
-                             <div>
-                                <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Renewal Deadline</span>
-                                <div className="text-md font-bold text-slate-700">
-                                  {exp.renewal_deadline || "Not Specified"}
-                                </div>
+                             {/* Renewal Option */}
+                             <div className="pt-2 border-t border-slate-100">
+                               <div className="flex items-center justify-between">
+                                 <div>
+                                   <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Renewal Option</p>
+                                   {editingField === `${exp.pinecone_doc_id || exp.document_id}_renewal_option_period` ? (
+                                     <div className="flex flex-col gap-1 mt-1">
+                                       <input
+                                         type="text"
+                                         value={editValue}
+                                         onChange={(e) => setEditValue(e.target.value)}
+                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
+                                       />
+                                       <input
+                                         type="text"
+                                         placeholder="Reason for change"
+                                         value={editReason}
+                                         onChange={(e) => setEditReason(e.target.value)}
+                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
+                                       />
+                                       <div className="flex gap-1">
+                                         <button
+                                           onClick={() => saveOverride((exp.pinecone_doc_id || exp.document_id), 'renewal_option_period')}
+                                           disabled={savingOverride}
+                                           className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded hover:bg-green-700"
+                                         >
+                                           {savingOverride ? 'Saving...' : 'Save'}
+                                         </button>
+                                         <button
+                                           onClick={() => {
+                                             setEditingField(null);
+                                             setEditValue('');
+                                             setEditReason('');
+                                           }}
+                                           className="text-[10px] bg-slate-300 text-slate-700 px-2 py-0.5 rounded hover:bg-slate-400"
+                                         >
+                                           Cancel
+                                         </button>
+                                       </div>
+                                     </div>
+                                   ) : (
+                                     <div className="flex items-center gap-1">
+                                       <p className="text-sm font-medium text-slate-800">
+                                         {exp.renewal_option_period && exp.renewal_option_period !== 'null' ? exp.renewal_option_period : <span className="text-slate-400 italic text-xs">Not extracted</span>}
+                                       </p>
+                                       {exp.renewal_option_period_source === 'manual_user_verified' && (
+                                         <span className="text-[9px] bg-green-100 text-green-700 px-1 rounded ml-1">✓ Verified</span>
+                                       )}
+                                     </div>
+                                   )}
+                                 </div>
+                                 <button
+                                   onClick={() => {
+                                     setEditingField(`${exp.pinecone_doc_id || exp.document_id}_renewal_option_period`);
+                                     setEditValue(exp.renewal_option_period && exp.renewal_option_period !== 'null' ? exp.renewal_option_period : '');
+                                     setEditReason('');
+                                   }}
+                                   className="text-slate-400 hover:text-purple-600 p-1"
+                                   title="Edit this field"
+                                 >
+                                   <Pencil size={12} />
+                                 </button>
+                               </div>
+                             </div>
+
+                             {/* Renewal Deadline */}
+                             <div className="pt-2 border-t border-slate-100">
+                               <div className="flex items-center justify-between">
+                                 <div>
+                                   <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Renewal Deadline</p>
+                                   {editingField === `${exp.pinecone_doc_id || exp.document_id}_renewal_deadline` ? (
+                                     <div className="flex flex-col gap-1 mt-1">
+                                       <input
+                                         type="date"
+                                         value={editValue}
+                                         onChange={(e) => setEditValue(e.target.value)}
+                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
+                                       />
+                                       <input
+                                         type="text"
+                                         placeholder="Reason for change"
+                                         value={editReason}
+                                         onChange={(e) => setEditReason(e.target.value)}
+                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
+                                       />
+                                       <div className="flex gap-1">
+                                         <button
+                                           onClick={() => saveOverride((exp.pinecone_doc_id || exp.document_id), 'renewal_deadline')}
+                                           disabled={savingOverride}
+                                           className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded hover:bg-green-700"
+                                         >
+                                           {savingOverride ? 'Saving...' : 'Save'}
+                                         </button>
+                                         <button
+                                           onClick={() => {
+                                             setEditingField(null);
+                                             setEditValue('');
+                                             setEditReason('');
+                                           }}
+                                           className="text-[10px] bg-slate-300 text-slate-700 px-2 py-0.5 rounded hover:bg-slate-400"
+                                         >
+                                           Cancel
+                                         </button>
+                                       </div>
+                                     </div>
+                                   ) : (
+                                     <div className="flex items-center gap-1">
+                                       <p className="text-md font-bold text-slate-700">
+                                         {exp.renewal_deadline || <span className="text-slate-400 italic text-xs">Not Specified</span>}
+                                       </p>
+                                       {exp.renewal_deadline_source === 'manual_user_verified' && (
+                                         <span className="text-[9px] bg-green-100 text-green-700 px-1 rounded ml-1">✓ Verified</span>
+                                       )}
+                                     </div>
+                                   )}
+                                 </div>
+                                 <button
+                                   onClick={() => {
+                                     setEditingField(`${exp.pinecone_doc_id || exp.document_id}_renewal_deadline`);
+                                     setEditValue(exp.renewal_deadline || '');
+                                     setEditReason('');
+                                   }}
+                                   className="text-slate-400 hover:text-purple-600 p-1"
+                                   title="Edit this field"
+                                 >
+                                   <Pencil size={12} />
+                                 </button>
+                               </div>
                              </div>
                              {exp.renewal_conditions && exp.renewal_conditions !== 'null' && (
                               <div className="mt-2 pt-2 border-t border-slate-100">

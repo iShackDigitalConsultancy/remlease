@@ -977,6 +977,57 @@ If a date is vague or missing, make your best guess for the date format "YYYY-MM
                             final_expiries.append(e)
             except:
                 pass
+
+        # Apply manual overrides
+        override_path = os.path.join(
+            UPLOAD_DIR,
+            f"{workspace_id}_overrides.json")
+        if os.path.exists(override_path):
+            try:
+                with open(override_path) as f:
+                    overrides = json.load(f)
+                for exp in final_expiries:
+                    doc_id = (
+                        exp.get("pinecone_doc_id")
+                        or exp.get("document_id")
+                    )
+                    if doc_id and doc_id in overrides:
+                        doc_ov = overrides[doc_id]
+                        field_map = {
+                            "commencement_date": 
+                                "raw_commencement_date",
+                            "expiry_date": 
+                                "expiry_date",
+                            "renewal_type": 
+                                "renewal_type",
+                            "notice_min_months":
+                                "notice_min_months",
+                            "notice_max_months":
+                                "notice_max_months",
+                            "renewal_deadline":
+                                "renewal_deadline",
+                        }
+                        for field, ov in \
+                            doc_ov.items():
+                            cache_field = \
+                                field_map.get(
+                                    field, field)
+                            exp[cache_field] = \
+                                ov["value"]
+                            exp[f"{cache_field}_source"]\
+                                = "manual_user_verified"
+            except Exception as e:
+                print(f"Override injection: {e}")
+
+        for exp in final_expiries:
+            if not exp.get("commencement_source"):
+                if exp.get(
+                    "raw_commencement_date_source"):
+                    exp["commencement_source"] = \
+                        exp["raw_commencement_date_source"]
+                else:
+                    exp["commencement_source"] = \
+                        "ai_extracted"
                 
         ws_summary_docs = []
         for exp in final_expiries:
