@@ -95,6 +95,33 @@ def harvest_annexure_orphans(text: str) -> str:
     except Exception:
         return text
 
+def merge_verified_edits(cache_data: dict, verified_edits: dict, report_type: str) -> dict:
+    import copy
+    merged = copy.deepcopy(cache_data)
+
+    if report_type == "expiries":
+        edits = verified_edits.get("edits", {})
+        for expiry in merged.get("expiries", []):
+            doc_name = expiry.get("document", "")
+            if doc_name in edits:
+                for field, value in edits[doc_name].items():
+                    expiry[field] = value
+                # Mark this entry as verified
+                expiry["_verified"] = True
+
+    elif report_type == "timeline":
+        edits = verified_edits.get("edits", {})
+        ft = merged.get("fundamental_terms", {})
+        for field, value in edits.items():
+            keys = field.split(".")
+            target = ft
+            for key in keys[:-1]:
+                target = target.get(key, {})
+            if isinstance(target, dict):
+                target[keys[-1]] = value
+
+    return merged
+
 async def cached_pipeline_stream(
     cache_path: str,
     force_refresh: bool,
@@ -162,6 +189,20 @@ async def cached_pipeline_stream(
             cached = json.load(f)
         # Apply overrides to cached data
         cached = apply_overrides(cached)
+        
+        # Overlay verified edits if they exist
+        endpoint_name = "expiries" if "extract_expiries" in cache_path else "timeline"
+        if endpoint_name == "expiries":
+            verified_path = cache_path.replace("extract_expiries.json", "verified_expiries.json")
+        else:
+            verified_path = cache_path.replace("fundamental_terms.json", "verified_timeline.json")
+            
+        if os.path.exists(verified_path):
+            with open(verified_path, "r") as vf:
+                verified = json.load(vf)
+            cached = merge_verified_edits(
+                cached, verified, endpoint_name)
+                
         yield f"data: {json.dumps({'status': 'complete', 'data': cached})}\n\n"
         return
 

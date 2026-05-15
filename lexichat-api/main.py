@@ -531,6 +531,160 @@ async def export_pdf(
         }
     )
 
+from models import VerifiedEditsPayload
+
+@app.post("/api/verified-edits")
+async def save_verified_edits(
+    payload: VerifiedEditsPayload,
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+    x_session_id: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    import json
+    from datetime import datetime
+    
+    workspace_id = payload.workspace_id
+    report_type = payload.report_type
+    
+    ws = db.query(models.Workspace).filter(models.Workspace.id == workspace_id).first()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    if current_user:
+        if ws.firm_id != current_user.firm_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        if ws.session_id != x_session_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+            
+    verified_path = os.path.join(
+        UPLOAD_DIR,
+        f"{workspace_id}_verified_{report_type}.json"
+    )
+    
+    data = {
+        "workspace_id": workspace_id,
+        "report_type": report_type,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+        "edits": payload.edits
+    }
+    
+    with open(verified_path, "w") as f:
+        json.dump(data, f, indent=2)
+        
+    return {"status": "saved"}
+
+@app.get("/api/verified-edits/{workspace_id}/{report_type}")
+async def get_verified_edits(
+    workspace_id: str,
+    report_type: str,
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+    x_session_id: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    import json
+    
+    ws = db.query(models.Workspace).filter(models.Workspace.id == workspace_id).first()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    if current_user:
+        if ws.firm_id != current_user.firm_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        if ws.session_id != x_session_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+            
+    verified_path = os.path.join(
+        UPLOAD_DIR,
+        f"{workspace_id}_verified_{report_type}.json"
+    )
+    
+    if os.path.exists(verified_path):
+        with open(verified_path, "r") as f:
+            return json.load(f)
+            
+    return {
+        "workspace_id": workspace_id,
+        "report_type": report_type,
+        "edits": {}
+    }
+
+@app.get("/api/verified-edits/{workspace_id}/status")
+async def get_verified_edits_status(
+    workspace_id: str,
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+    x_session_id: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    import json
+    
+    ws = db.query(models.Workspace).filter(models.Workspace.id == workspace_id).first()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    if current_user:
+        if ws.firm_id != current_user.firm_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        if ws.session_id != x_session_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+            
+    expiry_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_verified_expiries.json")
+    timeline_path = os.path.join(UPLOAD_DIR, f"{workspace_id}_verified_timeline.json")
+    
+    status = {
+        "has_expiry_edits": False,
+        "has_timeline_edits": False,
+        "expiry_updated_at": None,
+        "timeline_updated_at": None
+    }
+    
+    if os.path.exists(expiry_path):
+        status["has_expiry_edits"] = True
+        try:
+            with open(expiry_path, "r") as f:
+                data = json.load(f)
+                status["expiry_updated_at"] = data.get("updated_at")
+        except:
+            pass
+            
+    if os.path.exists(timeline_path):
+        status["has_timeline_edits"] = True
+        try:
+            with open(timeline_path, "r") as f:
+                data = json.load(f)
+                status["timeline_updated_at"] = data.get("updated_at")
+        except:
+            pass
+            
+    return status
+
+@app.delete("/api/verified-edits/{workspace_id}/{report_type}")
+async def delete_verified_edits(
+    workspace_id: str,
+    report_type: str,
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+    x_session_id: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    ws = db.query(models.Workspace).filter(models.Workspace.id == workspace_id).first()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    if current_user:
+        if ws.firm_id != current_user.firm_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        if ws.session_id != x_session_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+            
+    verified_path = os.path.join(
+        UPLOAD_DIR,
+        f"{workspace_id}_verified_{report_type}.json"
+    )
+    
+    if os.path.exists(verified_path):
+        os.remove(verified_path)
+        
+    return {"status": "deleted"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

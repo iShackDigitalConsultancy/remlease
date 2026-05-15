@@ -97,3 +97,8 @@ from typing import List
 class IntelligenceReportRequest(BaseModel):
     doc_ids: List[str]
     force_refresh: bool = False
+
+class VerifiedEditsPayload(BaseModel):
+    workspace_id: str
+    report_type: str
+    edits: dict
