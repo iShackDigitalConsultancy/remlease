@@ -2390,6 +2390,26 @@ END:VCALENDAR`;
                            </div>
                         </div>
                         
+                        {editingCardId === exp.document && (
+                          <div className="bg-amber-50 border-b border-amber-100 px-6 py-3 flex items-center justify-between">
+                            <span className="text-sm text-amber-800 font-bold">Edit Mode Active</span>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => saveVerifiedEdits(exp.document, cardEditData)}
+                                disabled={savingOverride}
+                                className="text-xs bg-brand-blue text-white px-4 py-1.5 rounded hover:bg-blue-700 font-bold flex items-center gap-1"
+                              >
+                                {savingOverride ? 'Saving...' : 'Save Verified Edits'}
+                              </button>
+                              <button
+                                onClick={() => { setEditingCardId(null); setCardEditData({}); }}
+                                className="text-xs bg-slate-200 text-slate-700 px-4 py-1.5 rounded hover:bg-slate-300 font-bold"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
                            <div className="lg:col-span-1 space-y-4">
                              {/* Commencement Date */}
