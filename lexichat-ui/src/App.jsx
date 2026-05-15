@@ -146,12 +146,14 @@ function InnerApp() {
   const [expiryData, setExpiryData] = useState(null);
   const [isExtractingExpiries, setIsExtractingExpiries] = useState(false);
 
-  const [editingField, setEditingField] = useState(null);
-  const [editValue, setEditValue] = useState('');
-  const [editReason, setEditReason] = useState('');
+  const [editingCardId, setEditingCardId] = useState(null);
+  const [cardEditData, setCardEditData] = useState({});
   const [savingOverride, setSavingOverride] = useState(false);
   const [showEditLog, setShowEditLog] = useState(false);
   const [editLog, setEditLog] = useState([]);
+  
+  const [showVerifyRefreshModal, setShowVerifyRefreshModal] = useState(false);
+  const [verifyRefreshTarget, setVerifyRefreshTarget] = useState(null);
 
   const [isGeneratingIntelligence, setIsGeneratingIntelligence] = useState(false);
   const [intelligenceReport, setIntelligenceReport] = useState(null);
@@ -738,44 +740,80 @@ function InnerApp() {
     }
   };
 
-  const saveOverride = async (documentId, fieldName) => {
-    if (!editValue.trim()) return;
+  const saveVerifiedEdits = async (documentName, edits) => {
     setSavingOverride(true);
     try {
-      const headers = {
-        'Content-Type': 'application/json'
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      } else if (sessionId) {
-        headers['x-session-id'] = sessionId;
-      }
-      const doc = library.find(d => d.name === documentId || d.filename === documentId || d.id === documentId);
-      const docIdToUse = doc ? doc.id : documentId;
-      const res = await fetch(
-        `${API_BASE}/workspace/${activeCase.id}/document/${docIdToUse}/overrides`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            field_name: fieldName,
-            value: editValue,
-            reason: editReason || 'Manual correction'
-          })
-        }
-      );
-      if (!res.ok) throw new Error('Failed to save override');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      else if (sessionId) headers['x-session-id'] = sessionId;
       
-      setEditingField(null);
-      setEditValue('');
-      setEditReason('');
+      const resGet = await fetch(`${API_BASE}/verified-edits/${activeCase.id}/expiries`, { headers: token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId } });
+      const current = await resGet.json();
       
+      const newEdits = current.edits || {};
+      newEdits[documentName] = edits;
+      
+      const resPost = await fetch(`${API_BASE}/verified-edits`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          workspace_id: activeCase.id,
+          report_type: 'expiries',
+          edits: newEdits
+        })
+      });
+      
+      if (!resPost.ok) throw new Error('Failed to save verified edits');
+      
+      setEditingCardId(null);
+      setCardEditData({});
+      
+      // Reload to show merged data from cache
       executeExpiryExtraction(false);
     } catch (err) {
       alert('Failed to save: ' + err.message);
     } finally {
       setSavingOverride(false);
     }
+  };
+
+  const handleRefreshClick = async (reportType) => {
+    if (!activeCase) return;
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
+      const res = await fetch(`${API_BASE}/verified-edits/${activeCase.id}/status`, { headers });
+      const status = await res.json();
+      
+      const hasEdits = reportType === 'expiries' ? status.has_expiry_edits : status.has_timeline_edits;
+      
+      if (hasEdits) {
+        setVerifyRefreshTarget(reportType);
+        setShowVerifyRefreshModal(true);
+      } else {
+        if (reportType === 'expiries') executeExpiryExtraction(true);
+        if (reportType === 'timeline') executeTimelineGeneration(true);
+      }
+    } catch (err) {
+      console.error(err);
+      if (reportType === 'expiries') executeExpiryExtraction(true);
+      if (reportType === 'timeline') executeTimelineGeneration(true);
+    }
+  };
+
+  const handleVerifyRefreshAction = async (action) => {
+    setShowVerifyRefreshModal(false);
+    if (action === 'cancel') return;
+    
+    if (action === 'overwrite') {
+      const headers = token ? { Authorization: `Bearer ${token}` } : { 'x-session-id': sessionId };
+      await fetch(`${API_BASE}/verified-edits/${activeCase.id}/${verifyRefreshTarget}`, {
+        method: 'DELETE',
+        headers
+      });
+    }
+    
+    if (verifyRefreshTarget === 'expiries') executeExpiryExtraction(true);
+    if (verifyRefreshTarget === 'timeline') executeTimelineGeneration(true);
   };
 
   const fetchEditLog = async () => {
@@ -2172,6 +2210,43 @@ END:VCALENDAR`;
       )}
 
       {/* Expiry Modal */}
+      {showVerifyRefreshModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="bg-amber-50 border-b border-amber-100 p-4">
+              <h3 className="font-bold text-amber-800 flex items-center gap-2">
+                <ShieldAlert size={18} /> Verified Edits Detected
+              </h3>
+            </div>
+            <div className="p-6">
+              <p className="text-slate-600 mb-6 leading-relaxed">
+                You have verified edits on this report. Re-extracting will overwrite them. What would you like to do?
+              </p>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => handleVerifyRefreshAction('keep')}
+                  className="w-full bg-brand-blue text-white py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium flex justify-center items-center gap-2"
+                >
+                  <ShieldCheck size={16} /> Keep Verified Edits
+                </button>
+                <button 
+                  onClick={() => handleVerifyRefreshAction('overwrite')}
+                  className="w-full bg-red-50 text-red-600 border border-red-200 py-2.5 rounded-lg hover:bg-red-100 transition-colors font-medium flex justify-center items-center gap-2"
+                >
+                  <Trash2 size={16} /> Overwrite All
+                </button>
+                <button 
+                  onClick={() => handleVerifyRefreshAction('cancel')}
+                  className="w-full bg-slate-100 text-slate-700 py-2.5 rounded-lg hover:bg-slate-200 transition-colors font-medium mt-2"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showExpiryModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
@@ -2186,7 +2261,7 @@ END:VCALENDAR`;
                 >
                   <Clock size={12} /> Edit Log
                 </button>
-                <button onClick={() => executeExpiryExtraction(true)} disabled={isExtractingExpiries} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isExtractingExpiries ? "Scanning..." : "Refresh"}</button>
+                <button onClick={() => handleRefreshClick('expiries')} disabled={isExtractingExpiries} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isExtractingExpiries ? "Scanning..." : "Refresh"}</button>
                 <button onClick={() => handleExportPDF('expiries', expiryData, activeCase?.name, expiryData?.expiries?.map(e => e.document) || [])} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
                 <button 
                   onClick={() => {
@@ -2283,6 +2358,23 @@ END:VCALENDAR`;
                            </div>
                            
                            <div className="flex flex-wrap md:flex-nowrap items-center gap-2">
+
+                             <button
+                               onClick={() => {
+                                 setEditingCardId(exp.document);
+                                 setCardEditData({
+                                   commencement_date: exp.commencement_date && exp.commencement_date !== 'null' ? exp.commencement_date : '',
+                                   expiry_date: exp.expiry_date && exp.expiry_date !== 'null' ? exp.expiry_date : '',
+                                   renewal_option_period: exp.renewal_option_period && exp.renewal_option_period !== 'null' ? exp.renewal_option_period : '',
+                                   renewal_deadline: exp.renewal_deadline && exp.renewal_deadline !== 'null' ? exp.renewal_deadline : '',
+                                   notice_min_months: exp.notice_min_months || '',
+                                   notice_max_months: exp.notice_max_months || ''
+                                 });
+                               }}
+                               className="text-xs flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                             >
+                               <Pencil size={12} /> Edit
+                             </button>
                              <button
                                onClick={() => generateICS(exp)}
                                className="text-xs flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
@@ -2304,42 +2396,10 @@ END:VCALENDAR`;
                              <div className="flex items-center justify-between">
                                <div>
                                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Commencement Date</p>
-                                 {editingField === `${exp.pinecone_doc_id || exp.document_id}_commencement_date` ? (
-                                   <div className="flex flex-col gap-1 mt-1">
-                                     <input
-                                       type="date"
-                                       value={editValue}
-                                       onChange={(e) => setEditValue(e.target.value)}
-                                       className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
-                                     />
-                                     <input
-                                       type="text"
-                                       placeholder="Reason for change"
-                                       value={editReason}
-                                       onChange={(e) => setEditReason(e.target.value)}
-                                       className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
-                                     />
-                                     <div className="flex gap-1">
-                                       <button
-                                         onClick={() => saveOverride((exp.pinecone_doc_id || exp.document_id), 'commencement_date')}
-                                         disabled={savingOverride}
-                                         className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded hover:bg-green-700"
-                                       >
-                                         {savingOverride ? 'Saving...' : 'Save'}
-                                       </button>
-                                       <button
-                                         onClick={() => {
-                                           setEditingField(null);
-                                           setEditValue('');
-                                           setEditReason('');
-                                         }}
-                                         className="text-[10px] bg-slate-300 text-slate-700 px-2 py-0.5 rounded hover:bg-slate-400"
-                                       >
-                                         Cancel
-                                       </button>
-                                     </div>
-                                   </div>
-                                 ) : (
+                                 {editingCardId === exp.document ? (
+                                     <input type="date" value={cardEditData.commencement_date || ''} onChange={(e) => setCardEditData({...cardEditData, commencement_date: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-full max-w-[200px] mt-1" />
+                                   ) : (
+                                     
                                    <div className="flex items-center gap-1">
                                      <p className="text-md font-bold text-slate-700 flex items-center gap-2">
                                        <Clock size={16} className="opacity-70"/> {exp.commencement_date || <span className="text-slate-400 italic text-xs">Not extracted</span>}
@@ -2348,19 +2408,9 @@ END:VCALENDAR`;
                                        <span className="text-[9px] bg-green-100 text-green-700 px-1 rounded ml-1">✓ Verified</span>
                                      )}
                                    </div>
-                                 )}
-                               </div>
-                               <button
-                                 onClick={() => {
-                                   setEditingField(`${exp.pinecone_doc_id || exp.document_id}_commencement_date`);
-                                   setEditValue(exp.commencement_date || '');
-                                   setEditReason('');
-                                 }}
-                                 className="text-slate-400 hover:text-purple-600 p-1"
-                                 title="Edit this field"
-                               >
-                                 <Pencil size={12} />
-                               </button>
+                                 
+                                   )}
+                                 </div>
                              </div>
                              
                              {exp.beneficial_occupation_date && exp.beneficial_occupation_date !== 'null' && (
@@ -2379,42 +2429,10 @@ END:VCALENDAR`;
                                <div className="flex items-center justify-between">
                                  <div>
                                    <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Expiration Date</p>
-                                   {editingField === `${exp.pinecone_doc_id || exp.document_id}_expiry_date` ? (
-                                     <div className="flex flex-col gap-1 mt-1">
-                                       <input
-                                         type="date"
-                                         value={editValue}
-                                         onChange={(e) => setEditValue(e.target.value)}
-                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
-                                       />
-                                       <input
-                                         type="text"
-                                         placeholder="Reason for change"
-                                         value={editReason}
-                                         onChange={(e) => setEditReason(e.target.value)}
-                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
-                                       />
-                                       <div className="flex gap-1">
-                                         <button
-                                           onClick={() => saveOverride((exp.pinecone_doc_id || exp.document_id), 'expiry_date')}
-                                           disabled={savingOverride}
-                                           className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded hover:bg-green-700"
-                                         >
-                                           {savingOverride ? 'Saving...' : 'Save'}
-                                         </button>
-                                         <button
-                                           onClick={() => {
-                                             setEditingField(null);
-                                             setEditValue('');
-                                             setEditReason('');
-                                           }}
-                                           className="text-[10px] bg-slate-300 text-slate-700 px-2 py-0.5 rounded hover:bg-slate-400"
-                                         >
-                                           Cancel
-                                         </button>
-                                       </div>
-                                     </div>
+                                   {editingCardId === exp.document ? (
+                                     <input type="date" value={cardEditData.expiry_date || ''} onChange={(e) => setCardEditData({...cardEditData, expiry_date: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-full max-w-[200px] mt-1" />
                                    ) : (
+                                     
                                      <div className="flex items-center gap-1">
                                        <p className="text-xl font-black text-brand-accent flex items-center gap-2">
                                          <Clock size={18} className="opacity-80"/> {exp.expiry_date || <span className="text-slate-400 italic text-xs">Not extracted</span>}
@@ -2423,19 +2441,9 @@ END:VCALENDAR`;
                                          <span className="text-[9px] bg-green-100 text-green-700 px-1 rounded ml-1">✓ Verified</span>
                                        )}
                                      </div>
+                                   
                                    )}
                                  </div>
-                                 <button
-                                   onClick={() => {
-                                     setEditingField(`${exp.pinecone_doc_id || exp.document_id}_expiry_date`);
-                                     setEditValue(exp.expiry_date || '');
-                                     setEditReason('');
-                                   }}
-                                   className="text-slate-400 hover:text-purple-600 p-1"
-                                   title="Edit this field"
-                                 >
-                                   <Pencil size={12} />
-                                 </button>
                                </div>
                              </div>
 
@@ -2444,42 +2452,10 @@ END:VCALENDAR`;
                                <div className="flex items-center justify-between">
                                  <div>
                                    <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Renewal Option</p>
-                                   {editingField === `${exp.pinecone_doc_id || exp.document_id}_renewal_option_period` ? (
-                                     <div className="flex flex-col gap-1 mt-1">
-                                       <input
-                                         type="text"
-                                         value={editValue}
-                                         onChange={(e) => setEditValue(e.target.value)}
-                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
-                                       />
-                                       <input
-                                         type="text"
-                                         placeholder="Reason for change"
-                                         value={editReason}
-                                         onChange={(e) => setEditReason(e.target.value)}
-                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
-                                       />
-                                       <div className="flex gap-1">
-                                         <button
-                                           onClick={() => saveOverride((exp.pinecone_doc_id || exp.document_id), 'renewal_option_period')}
-                                           disabled={savingOverride}
-                                           className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded hover:bg-green-700"
-                                         >
-                                           {savingOverride ? 'Saving...' : 'Save'}
-                                         </button>
-                                         <button
-                                           onClick={() => {
-                                             setEditingField(null);
-                                             setEditValue('');
-                                             setEditReason('');
-                                           }}
-                                           className="text-[10px] bg-slate-300 text-slate-700 px-2 py-0.5 rounded hover:bg-slate-400"
-                                         >
-                                           Cancel
-                                         </button>
-                                       </div>
-                                     </div>
+                                   {editingCardId === exp.document ? (
+                                     <input type="text" value={cardEditData.renewal_option_period || ''} onChange={(e) => setCardEditData({...cardEditData, renewal_option_period: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-full max-w-[200px] mt-1" />
                                    ) : (
+                                     
                                      <div className="flex items-center gap-1">
                                        <p className="text-sm font-medium text-slate-800">
                                          {exp.renewal_option_period && exp.renewal_option_period !== 'null' ? exp.renewal_option_period : <span className="text-slate-400 italic text-xs">Not extracted</span>}
@@ -2488,19 +2464,9 @@ END:VCALENDAR`;
                                          <span className="text-[9px] bg-green-100 text-green-700 px-1 rounded ml-1">✓ Verified</span>
                                        )}
                                      </div>
+                                   
                                    )}
                                  </div>
-                                 <button
-                                   onClick={() => {
-                                     setEditingField(`${exp.pinecone_doc_id || exp.document_id}_renewal_option_period`);
-                                     setEditValue(exp.renewal_option_period && exp.renewal_option_period !== 'null' ? exp.renewal_option_period : '');
-                                     setEditReason('');
-                                   }}
-                                   className="text-slate-400 hover:text-purple-600 p-1"
-                                   title="Edit this field"
-                                 >
-                                   <Pencil size={12} />
-                                 </button>
                                </div>
                              </div>
 
@@ -2509,42 +2475,10 @@ END:VCALENDAR`;
                                <div className="flex items-center justify-between">
                                  <div>
                                    <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Renewal Deadline</p>
-                                   {editingField === `${exp.pinecone_doc_id || exp.document_id}_renewal_deadline` ? (
-                                     <div className="flex flex-col gap-1 mt-1">
-                                       <input
-                                         type="date"
-                                         value={editValue}
-                                         onChange={(e) => setEditValue(e.target.value)}
-                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
-                                       />
-                                       <input
-                                         type="text"
-                                         placeholder="Reason for change"
-                                         value={editReason}
-                                         onChange={(e) => setEditReason(e.target.value)}
-                                         className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
-                                       />
-                                       <div className="flex gap-1">
-                                         <button
-                                           onClick={() => saveOverride((exp.pinecone_doc_id || exp.document_id), 'renewal_deadline')}
-                                           disabled={savingOverride}
-                                           className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded hover:bg-green-700"
-                                         >
-                                           {savingOverride ? 'Saving...' : 'Save'}
-                                         </button>
-                                         <button
-                                           onClick={() => {
-                                             setEditingField(null);
-                                             setEditValue('');
-                                             setEditReason('');
-                                           }}
-                                           className="text-[10px] bg-slate-300 text-slate-700 px-2 py-0.5 rounded hover:bg-slate-400"
-                                         >
-                                           Cancel
-                                         </button>
-                                       </div>
-                                     </div>
+                                   {editingCardId === exp.document ? (
+                                     <input type="date" value={cardEditData.renewal_deadline || ''} onChange={(e) => setCardEditData({...cardEditData, renewal_deadline: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-full max-w-[200px] mt-1" />
                                    ) : (
+                                     
                                      <div className="flex items-center gap-1">
                                        <p className="text-md font-bold text-slate-700">
                                          {exp.renewal_deadline || <span className="text-slate-400 italic text-xs">Not Specified</span>}
@@ -2553,19 +2487,9 @@ END:VCALENDAR`;
                                          <span className="text-[9px] bg-green-100 text-green-700 px-1 rounded ml-1">✓ Verified</span>
                                        )}
                                      </div>
+                                   
                                    )}
                                  </div>
-                                 <button
-                                   onClick={() => {
-                                     setEditingField(`${exp.pinecone_doc_id || exp.document_id}_renewal_deadline`);
-                                     setEditValue(exp.renewal_deadline || '');
-                                     setEditReason('');
-                                   }}
-                                   className="text-slate-400 hover:text-purple-600 p-1"
-                                   title="Edit this field"
-                                 >
-                                   <Pencil size={12} />
-                                 </button>
                                </div>
                              </div>
                              {exp.renewal_conditions && exp.renewal_conditions !== 'null' && (
@@ -2906,7 +2830,7 @@ END:VCALENDAR`;
                 <Clock className="text-brand-accent" size={18} /> Fundamental Terms
               </h2>
               <div className="flex items-center gap-3">
-                <button onClick={() => executeTimelineGeneration(true)} disabled={isGeneratingTimeline} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isGeneratingTimeline ? "Extracting..." : "Refresh"}</button>
+                <button onClick={() => handleRefreshClick('timeline')} disabled={isGeneratingTimeline} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isGeneratingTimeline ? "Extracting..." : "Refresh"}</button>
                 {library.map((doc, i) => (
                     <button key={i} onClick={() => handleDownloadOriginal(doc.id, doc.filename)} className="text-xs flex items-center gap-1.5 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue py-1.5 px-3 rounded-md transition-colors" title={`Download ${doc.filename}`}><Download size={14}/> PDF {i+1}</button>
                 ))}
