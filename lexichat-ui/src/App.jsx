@@ -2453,7 +2453,7 @@ END:VCALENDAR`;
                                  <div>
                                    <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Renewal Option</p>
                                    {editingCardId === exp.document ? (
-                                     <input type="text" value={cardEditData.renewal_option_period || ''} onChange={(e) => setCardEditData({...cardEditData, renewal_option_period: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-full max-w-[200px] mt-1" />
+                                     <input type="text" placeholder="e.g. 5 years or None" value={cardEditData.renewal_option_period || ''} onChange={(e) => setCardEditData({...cardEditData, renewal_option_period: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-full max-w-[200px] mt-1" />
                                    ) : (
                                      
                                      <div className="flex items-center gap-1">
@@ -2476,7 +2476,7 @@ END:VCALENDAR`;
                                  <div>
                                    <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Renewal Deadline</p>
                                    {editingCardId === exp.document ? (
-                                     <input type="date" value={cardEditData.renewal_deadline || ''} onChange={(e) => setCardEditData({...cardEditData, renewal_deadline: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-full max-w-[200px] mt-1" />
+                                     <input type="text" placeholder="e.g. 2026-11-26 or N/A" value={cardEditData.renewal_deadline || ''} onChange={(e) => setCardEditData({...cardEditData, renewal_deadline: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-full max-w-[200px] mt-1" />
                                    ) : (
                                      
                                      <div className="flex items-center gap-1">
@@ -2488,6 +2488,36 @@ END:VCALENDAR`;
                                        )}
                                      </div>
                                    
+                                   )}
+                                 </div>
+                               </div>
+                             </div>
+
+                             {/* Notice Periods */}
+                             <div className="pt-2 border-t border-slate-100">
+                               <div className="flex items-center justify-between">
+                                 <div>
+                                   <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Notice Periods</p>
+                                   {editingCardId === exp.document ? (
+                                     <div className="flex gap-2 mt-1">
+                                       <div className="flex flex-col">
+                                         <label className="text-[9px] text-slate-400">Min Months</label>
+                                         <input type="text" placeholder="e.g. 6" value={cardEditData.notice_min_months || ''} onChange={(e) => setCardEditData({...cardEditData, notice_min_months: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-24" />
+                                       </div>
+                                       <div className="flex flex-col">
+                                         <label className="text-[9px] text-slate-400">Max Months</label>
+                                         <input type="text" placeholder="e.g. 9" value={cardEditData.notice_max_months || ''} onChange={(e) => setCardEditData({...cardEditData, notice_max_months: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-24" />
+                                       </div>
+                                     </div>
+                                   ) : (
+                                     <div className="flex items-center gap-1">
+                                       <p className="text-sm font-medium text-slate-800">
+                                         Min: {exp.notice_min_months || 'N/A'} / Max: {exp.notice_max_months || 'N/A'}
+                                       </p>
+                                       {(exp.notice_min_months_source === 'manual_user_verified' || exp.notice_max_months_source === 'manual_user_verified') && (
+                                         <span className="text-[9px] bg-green-100 text-green-700 px-1 rounded ml-1">✓ Verified</span>
+                                       )}
+                                     </div>
                                    )}
                                  </div>
                                </div>
