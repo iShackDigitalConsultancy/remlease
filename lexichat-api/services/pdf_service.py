@@ -402,6 +402,7 @@ def build_portfolio_pdf(portfolio_data, firm_name) -> BytesIO:
         if docs:
             table_data = [[
                 Paragraph("<b>Document</b>", styles['Normal']),
+                Paragraph("<b>Verified</b>", styles['Normal']),
                 Paragraph("<b>Type</b>", styles['Normal']),
                 Paragraph("<b>Commencement</b>", styles['Normal']),
                 Paragraph("<b>Expiry</b>", styles['Normal']),
@@ -410,8 +411,10 @@ def build_portfolio_pdf(portfolio_data, firm_name) -> BytesIO:
             ]]
             
             for doc_item in docs:
+                verified_mark = "✓" if doc_item.get("_verified") else ""
                 table_data.append([
                     Paragraph(safe(doc_item.get("filename")), styles['Normal']),
+                    Paragraph(verified_mark, styles['Normal']),
                     Paragraph(safe(doc_item.get("doc_type")), styles['Normal']),
                     Paragraph(safe(doc_item.get("commencement_date")), styles['Normal']),
                     Paragraph(safe(doc_item.get("expiry_date")), styles['Normal']),
@@ -419,7 +422,7 @@ def build_portfolio_pdf(portfolio_data, firm_name) -> BytesIO:
                     Paragraph(safe(doc_item.get("action_required")), styles['Normal'])
                 ])
             
-            t = Table(table_data, colWidths=[3.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 4.5*cm])
+            t = Table(table_data, colWidths=[3.5*cm, 1.5*cm, 2.0*cm, 2.5*cm, 2.5*cm, 2.5*cm, 3.5*cm])
             t.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1a56db')),
                 ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
@@ -434,6 +437,10 @@ def build_portfolio_pdf(portfolio_data, firm_name) -> BytesIO:
         story.append(Spacer(1, 0.8*cm))
         story.append(HRFlowable(width="100%", thickness=1, color=colors.lightgrey))
         story.append(Spacer(1, 0.5*cm))
+    
+    date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    story.append(Spacer(1, 1*cm))
+    story.append(Paragraph(f"<i>Report generated {date_str}. Documents marked ✓ contain user-verified fields.</i>", styles['Normal']))
     
     doc.build(story, onFirstPage=_add_branding, onLaterPages=_add_branding)
     buffer.seek(0)

@@ -1285,6 +1285,15 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                             overrides = json.load(f)
                     except Exception:
                         pass
+                        
+                verified_path = os.path.join(cache_dir, f"{ws.id}_verified_expiries.json")
+                if os.path.exists(verified_path):
+                    try:
+                        with open(verified_path, "r") as vf:
+                            verified_data = json.load(vf)
+                        cached = merge_verified_edits(cached, verified_data, "expiries")
+                    except Exception:
+                        pass
                 
                 expiries = cached.get("expiries", [])
                 for exp in expiries:
@@ -1329,6 +1338,7 @@ async def portfolio_overview(current_user: Optional[models.User] = Depends(get_c
                     
                     ws_summary["documents"].append({
                         "filename": doc_name,
+                        "_verified": exp.get("_verified", False),
                         "doc_type": doc_type,
                         "commencement_date": (
                             exp.get("raw_commencement_date")
