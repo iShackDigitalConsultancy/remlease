@@ -8,7 +8,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 import { 
-  FileText, UploadCloud, MessageSquare, Send, CheckCircle2, 
+  FileText, UploadCloud, Upload, MessageSquare, Send, CheckCircle2, 
   Loader2, Scale, BookOpen, Clock, ChevronRight, ChevronDown, ChevronUp, Lock, Trash2, FolderOpen, X, Download, LogOut, Building2, Edit2, Shield, Zap, ShieldCheck, XCircle, ShieldAlert, Users, GitCompare, Calendar, CalendarPlus, Database, BellRing, Layers, ExternalLink, Printer, RefreshCw, MapPin, Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -2261,6 +2261,53 @@ END:VCALENDAR`;
                 >
                   <Clock size={12} /> Edit Log
                 </button>
+                <button
+                  onClick={() => window.open(`${API_BASE}/override-template`, '_blank')}
+                  className="flex items-center gap-1 text-xs text-slate-500 hover:text-purple-600"
+                >
+                  <Download size={12} /> CSV Template
+                </button>
+
+                <label className="flex items-center gap-1 text-xs text-slate-500 hover:text-purple-600 cursor-pointer">
+                  <Upload size={12} /> Import CSV
+                  <input
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      try {
+                        const headers = {};
+                        if (token) {
+                          headers['Authorization'] = `Bearer ${token}`;
+                        } else if (sessionId) {
+                          headers['x-session-id'] = sessionId;
+                        }
+                        const res = await fetch(
+                          `${API_BASE}/workspace/${activeCase.id}/import-overrides`,
+                          {
+                            method: 'POST',
+                            headers,
+                            body: formData
+                          }
+                        );
+                        if (!res.ok) throw new Error('Import failed');
+                        const data = await res.json();
+                        alert(
+                          `Imported ${data.imported_count} overrides successfully.` +
+                          (data.errors.length > 0 ? ` ${data.errors.length} errors.` : '')
+                        );
+                        executeExpiryExtraction(false);
+                      } catch (err) {
+                        alert('CSV import failed: ' + err.message);
+                      }
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
                 <button onClick={() => handleRefreshClick('expiries')} disabled={isExtractingExpiries} className="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50"><RefreshCw size={14}/> {isExtractingExpiries ? "Scanning..." : "Refresh"}</button>
                 <button onClick={() => handleExportPDF('expiries', expiryData, activeCase?.name, expiryData?.expiries?.map(e => e.document) || [])} className="text-xs flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-md transition-colors"><FileText size={14}/> Export</button>
                 <button 
@@ -2346,6 +2393,17 @@ END:VCALENDAR`;
                                <FileText className="text-brand-blue shrink-0" size={18} />
                                <span className="font-bold text-slate-900 truncate" title={exp.document}>{exp.document}</span>
                              </div>
+                             {editingCardId === exp.document ? (
+                               <input type="text" placeholder="e.g. Shop 12 N1 City" value={cardEditData.location || ''} onChange={(e) => setCardEditData({...cardEditData, location: e.target.value})} className="text-xs border border-slate-300 rounded px-2 py-1 w-full max-w-[200px] ml-7 mt-1" />
+                             ) : (
+                               <div className="text-[10px] ml-7 mt-1 flex items-center gap-1 text-slate-500">
+                                  <MapPin size={10} />
+                                  <span>{exp.location && exp.location !== 'null' ? exp.location : <span className="italic text-slate-400">Location not specified</span>}</span>
+                                  {exp.location_source === 'manual_user_verified' && (
+                                     <span className="text-[9px] bg-green-100 text-green-700 px-1 rounded ml-1">✓ Verified</span>
+                                  )}
+                               </div>
+                             )}
                              <button 
                                onClick={() => {
                                  const doc = library.find(d => d.name === exp.document || d.filename === exp.document);
@@ -2368,7 +2426,8 @@ END:VCALENDAR`;
                                    renewal_option_period: exp.renewal_option_period && exp.renewal_option_period !== 'null' ? exp.renewal_option_period : '',
                                    renewal_deadline: exp.renewal_deadline && exp.renewal_deadline !== 'null' ? exp.renewal_deadline : '',
                                    notice_min_months: exp.notice_min_months || '',
-                                   notice_max_months: exp.notice_max_months || ''
+                                   notice_max_months: exp.notice_max_months || '',
+                                   location: exp.location && exp.location !== 'null' ? exp.location : ''
                                  });
                                }}
                                className="text-xs flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg transition-colors font-medium"

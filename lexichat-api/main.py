@@ -436,7 +436,7 @@ async def save_override(
         "deposit", "monthly_rental",
         "escalation_rate", "franchise_fee_pct",
         "franchise_term_years", 
-        "franchise_renewal"
+        "franchise_renewal", "location"
     }
     
     if field not in allowed:
@@ -688,3 +688,106 @@ async def delete_verified_edits(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+@app.post("/api/workspace/{workspace_id}/import-overrides")
+async def import_overrides_csv(
+    workspace_id: str,
+    file: UploadFile = File(...),
+    current_user = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    import json, csv, io
+    from datetime import datetime
+    
+    contents = await file.read()
+    text = contents.decode('utf-8-sig')
+    reader = csv.DictReader(io.StringIO(text))
+    
+    override_path = os.path.join(
+        UPLOAD_DIR,
+        f"{workspace_id}_overrides.json")
+    
+    overrides = {}
+    if os.path.exists(override_path):
+        with open(override_path) as f:
+            overrides = json.load(f)
+    
+    allowed = {
+        "commencement_date", "expiry_date",
+        "renewal_type", "renewal_deadline",
+        "notice_min_months", "notice_max_months",
+        "deposit", "monthly_rental",
+        "escalation_rate", "franchise_fee_pct",
+        "franchise_term_years", "franchise_renewal", "location"
+    }
+    
+    imported = 0
+    errors = []
+    
+    for row in reader:
+        doc_id = row.get("document_id", "").strip()
+        field = row.get("field_name", "").strip()
+        value = row.get("value", "").strip()
+        reason = row.get("reason", "").strip() or "CSV import"
+        
+        if not doc_id or not field or not value:
+            errors.append(f"Row missing required fields: {row}")
+            continue
+        
+        if field not in allowed:
+            errors.append(f"Field not allowed: {field}")
+            continue
+        
+        if doc_id not in overrides:
+            overrides[doc_id] = {}
+        
+        existing = overrides.get(doc_id, {}).get(field, {})
+        history = existing.get("history", [])
+        if existing.get("value"):
+            history.append({
+                "previous_value": existing["value"],
+                "changed_at": existing.get("updated_at"),
+                "changed_by": existing.get("updated_by"),
+                "reason": existing.get("reason")
+            })
+        
+        overrides[doc_id][field] = {
+            "value": value,
+            "reason": reason,
+            "source": "csv_import",
+            "confidence": 1.0,
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+            "updated_by": getattr(current_user, 'email', 'csv_import'),
+            "history": history
+        }
+        imported += 1
+    
+    with open(override_path, "w") as f:
+        json.dump(overrides, f, indent=2)
+    
+    return {
+        "status": "imported",
+        "imported_count": imported,
+        "errors": errors
+    }
+
+@app.get("/api/override-template")
+async def download_override_template():
+    import io
+    from fastapi.responses import StreamingResponse
+    
+    output = io.StringIO()
+    output.write("document_id,field_name,value,reason\n")
+    output.write("paste-doc-uuid-here,commencement_date,2025-01-01,Verified from page 4\n")
+    output.write("paste-doc-uuid-here,expiry_date,2030-01-01,Verified from schedule\n")
+    output.write("paste-doc-uuid-here,location,Shop 12 N1 City Mall,Verified from lease\n")
+    
+    output.seek(0)
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode()),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=override_template.csv"
+        }
+    )
